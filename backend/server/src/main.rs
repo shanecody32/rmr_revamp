@@ -21,13 +21,20 @@ async fn main() -> anyhow::Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    // Database connection
+    // Database connection - optional for demo
     let database_url = env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/rmr_db".to_string());
     
-    tracing::info!("Connecting to database...");
-    let db: DatabaseConnection = Database::connect(&database_url).await?;
-    tracing::info!("Database connected successfully");
+    tracing::info!("Attempting to connect to database...");
+    let db_result: Result<DatabaseConnection, _> = Database::connect(&database_url).await;
+    
+    match &db_result {
+        Ok(_) => tracing::info!("Database connected successfully"),
+        Err(e) => {
+            tracing::warn!("Database connection failed: {}. Server will run without database.", e);
+            tracing::warn!("To connect to a database, set DATABASE_URL in .env file");
+        }
+    }
 
     // Configure CORS
     let cors = CorsLayer::new()
@@ -36,11 +43,19 @@ async fn main() -> anyhow::Result<()> {
         .allow_headers(Any);
 
     // Build application router
-    let app = Router::new()
-        .route("/", get(root))
-        .route("/health", get(health_check))
-        .layer(cors)
-        .with_state(db);
+    let app = if let Ok(db) = db_result {
+        Router::new()
+            .route("/", get(root))
+            .route("/health", get(health_check))
+            .layer(cors)
+            .with_state(db)
+    } else {
+        // Run without database state
+        Router::new()
+            .route("/", get(root))
+            .route("/health", get(health_check))
+            .layer(cors)
+    };
 
     // Get server address from environment or use default
     let host = env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());

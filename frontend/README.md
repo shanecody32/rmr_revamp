@@ -14,11 +14,19 @@ pnpm dev
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3001](http://localhost:3001) with your browser to see the result.
+
+Note: This frontend is configured to run on port 3001 to avoid conflicts with the backend API which runs on port 3000.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Tech Stack
+
+This project uses:
+- **Next.js 16** with App Router
+- **Ant Design** for UI components
+- **TypeScript** for type safety
+- **Tailwind CSS** for styling
 
 ## Learn More
 
