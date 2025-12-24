@@ -75,7 +75,7 @@ cp .env.example .env
 
 Edit `.env` and set your `DATABASE_URL`:
 ```env
-DATABASE_URL=postgres://username:password@localhost:5432/rmr_db
+DATABASE_URL=postgres://roots_data:Froggie19581953@localhost:5432/rmr_loco_development
 ```
 
 ### 3. Generate Entities
@@ -86,7 +86,8 @@ After setting up your database schema, generate SeaORM entities:
 sea-orm-cli generate entity \
   -o backend/src/entities \
   --with-serde both \
-  --database-url "postgres://username:password@localhost:5432/rmr_db"
+  --seaography \
+  --database-url "postgres://roots_data:Froggie19581953@localhost:5432/rmr_loco_development"
 ```
 
 This will generate Rust entity files based on your existing PostgreSQL database tables.

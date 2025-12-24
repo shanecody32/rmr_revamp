@@ -23,7 +23,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Database connection - optional for demo
     let database_url = env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/rmr_db".to_string());
+        .unwrap_or_else(|_| "postgres://roots_data:Froggie19581953@localhost:5432/rmr_loco_development".to_string());
     
     tracing::info!("Attempting to connect to database...");
     let db_result: Result<DatabaseConnection, _> = Database::connect(&database_url).await;
