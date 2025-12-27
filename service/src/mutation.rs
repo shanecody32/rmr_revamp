@@ -1,4 +1,4 @@
-use ::entity::{band, band::Entity as Band};
+use ::entity::{bands as band, bands::Entity as Band};
 use sea_orm::*;
 
 pub struct Mutation;
@@ -32,6 +32,7 @@ impl Mutation {
             id: band.id,
             name: Set(form_data.name.to_owned()),
             bio: Set(form_data.bio.to_owned()),
+            ..Default::default()
         }
             .update(db)
             .await

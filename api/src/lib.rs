@@ -7,15 +7,15 @@ use axum::{
     extract::{Form, Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{Html, IntoResponse, Json},
-    routing::{get, get_service, band},
-    Router,
+    routing::{get, post, get_service},
+    Router, ServiceExt,
 };
-use axum_example_service::{
+use rmr_service::{
     sea_orm::{Database, DatabaseConnection},
     Mutation as MutationCore, Query as QueryCore,
 };
-use entity::band;
-use flash::{get_flash_cookie, band_response, BandResponse};
+use entity::bands as band;
+use flash::{get_flash_cookie, post_response as band_response, PostResponse as BandResponse};
 use migration::{Migrator, MigratorTrait};
 use sea_orm_pro::{ConfigParser, JsonCfg};
 use seaography::async_graphql;
@@ -27,7 +27,9 @@ use tower_http::services::{ServeDir, ServeFile};
 
 #[tokio::main]
 async fn start() -> anyhow::Result<()> {
-    env::set_var("RUST_LOG", "debug");
+    unsafe {
+        env::set_var("RUST_LOG", "debug");
+    }
     tracing_subscriber::fmt::init();
 
     dotenvy::dotenv().ok();
@@ -47,27 +49,21 @@ async fn start() -> anyhow::Result<()> {
     let state = AppState { templates, conn };
 
     let app = Router::new()
-        .route("/", get(list_bands).band(create_band))
-        .route("/{id}", get(edit_band).band(update_band))
+        .route("/", get(list_bands).post(create_band))
+        .route("/{id}", get(edit_band).post(update_band))
         .route("/new", get(new_band))
-        .route("/delete/{id}", band(delete_band))
+        .route("/delete/{id}", post(delete_band))
         .route("/api/admin/config", get(admin_panel_config))
-        .route("/api/auth/login", band(user_login))
+        .route("/api/auth/login", post(user_login))
         .route("/api/user/current", get(current_user))
         .route("/api/graphql", get(graphql_playground))
-        .route("/api/graphql", band(graphql_handler))
+        .route("/api/graphql", post(graphql_handler))
         .nest_service(
             "/static",
-            get_service(ServeDir::new(concat!(
+            ServeDir::new(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/static"
-            )))
-                .handle_error(|error| async move {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Unhandled internal error: {error}"),
-                    )
-                }),
+            ))
         )
         .nest_service(
             "/admin",
@@ -158,9 +154,9 @@ async fn create_band(
     mut cookies: Cookies,
     form: Form<band::Model>,
 ) -> Result<BandResponse, (StatusCode, &'static str)> {
-    let form = form.0;
+    let form_data = form.0;
 
-    MutationCore::create_band(&state.conn, form)
+    MutationCore::create_band(&state.conn, form_data)
         .await
         .expect("could not insert band");
 
@@ -198,9 +194,9 @@ async fn update_band(
     mut cookies: Cookies,
     form: Form<band::Model>,
 ) -> Result<BandResponse, (StatusCode, String)> {
-    let form = form.0;
+    let form_data = form.0;
 
-    MutationCore::update_band_by_id(&state.conn, id, form)
+    MutationCore::update_band_by_id(&state.conn, id, form_data)
         .await
         .expect("could not edit band");
 

@@ -1,4 +1,4 @@
-use ::entity::{band, band::Entity as Band};
+use ::entity::{bands as band, bands::Entity as Band};
 use sea_orm::*;
 
 pub struct Query;

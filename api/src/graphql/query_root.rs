@@ -1,7 +1,7 @@
 use async_graphql::dynamic::*;
-use rmr_api_service::sea_orm;
-use rmr_api_service::sea_orm::DatabaseConnection;
-use entities::band;
+use rmr_service::sea_orm;
+use rmr_service::sea_orm::DatabaseConnection;
+use entity::bands as band;
 use seaography::{async_graphql, lazy_static, Builder, BuilderContext};
 
 seaography::register_entity_modules!([band]);
