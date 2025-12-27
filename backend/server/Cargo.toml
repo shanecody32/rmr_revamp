@@ -1,0 +1,20 @@
+[package]
+name = "backend-server"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+backend = { path = ".." }
+
+tokio.workspace = true
+axum.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+sea-orm.workspace = true
+seaography.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+dotenvy.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true

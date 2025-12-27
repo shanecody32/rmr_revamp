@@ -1,0 +1,12 @@
+# SeaORM CLI Configuration
+# This file provides default settings for sea-orm-cli commands
+
+# Database connection
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/rmr_db
+
+# Output directory for generated entities
+OUTPUT_DIR=backend/src/entities
+
+# Additional options
+WITH_SERDE=both
+WITH_COPY_ENUMS=true
