@@ -1,0 +1,14 @@
+[package]
+name = "entity"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "entity"
+path = "src/lib.rs"
+
+[dependencies]
+serde.workspace = true
+seaography.workspace = true
+sea-orm.workspace = true
+tokio.workspace = true
