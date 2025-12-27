@@ -1,0 +1,17 @@
+[package]
+name = "entity"
+version = "0.1.0"
+edition = "2021"
+publish = false
+rust-version = "1.85.0"
+
+[lib]
+name = "entity"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+seaography = { version = "2.0.0-rc", features = ["with-decimal", "with-chrono", "with-uuid", "field-snake-case"] }
+
+[dependencies.sea-orm]
+version = "~2.0.0-rc" # sea-orm version
