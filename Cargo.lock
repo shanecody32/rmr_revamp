@@ -2606,6 +2606,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rmr_backend"
+version = "0.1.0"
+dependencies = [
+ "axum-example-api",
+ "sea-orm",
+ "seaography",
+]
+
+[[package]]
 name = "rsa"
 version = "0.9.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2749,7 +2758,8 @@ dependencies = [
 [[package]]
 name = "sea-orm"
 version = "2.0.0-rc.22"
-source = "git+https://github.com/SeaQL/sea-orm?branch=master#ee3748a7aff9269180bd834853f573f6daf478f5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38cb08645b287dde889794834dedbcb706cfabb2c5e4239b2828ddc8cd32f84d"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -2778,18 +2788,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "sea-orm-axum-example"
-version = "0.1.0"
-dependencies = [
- "axum-example-api",
- "sea-orm",
- "seaography",
-]
-
-[[package]]
 name = "sea-orm-cli"
 version = "2.0.0-rc.22"
-source = "git+https://github.com/SeaQL/sea-orm?branch=master#ee3748a7aff9269180bd834853f573f6daf478f5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d27be647fedbc1c2ae4107152e454c879621eed105e4217c45f526755ab14df3"
 dependencies = [
  "chrono",
  "clap",
@@ -2808,7 +2810,8 @@ dependencies = [
 [[package]]
 name = "sea-orm-macros"
 version = "2.0.0-rc.22"
-source = "git+https://github.com/SeaQL/sea-orm?branch=master#ee3748a7aff9269180bd834853f573f6daf478f5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d51b5590506f1fc2eeed63966f8d9ab28c0bd7c25853a1fa5e427560af4b1cce"
 dependencies = [
  "heck 0.5.0",
  "pluralizer",
@@ -2823,7 +2826,8 @@ dependencies = [
 [[package]]
 name = "sea-orm-migration"
 version = "2.0.0-rc.22"
-source = "git+https://github.com/SeaQL/sea-orm?branch=master#ee3748a7aff9269180bd834853f573f6daf478f5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "511d8506aee819a349acd9801e3d7e866221254b2b2fc373df850cbb84fcee46"
 dependencies = [
  "async-trait",
  "clap",
@@ -2854,6 +2858,7 @@ version = "1.0.0-rc.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8edd21d591f27a3b6dda2093cc27b324eda2f8b34906bcbe534621188b60e96a"
 dependencies = [
+ "bigdecimal",
  "chrono",
  "inherent",
  "ordered-float",
@@ -2884,6 +2889,7 @@ version = "0.8.0-rc.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3c45d0fefde032a4cb0938901eb702b20430881a6de7f6b3664f46373978f00"
 dependencies = [
+ "bigdecimal",
  "chrono",
  "jiff-sqlx",
  "rust_decimal",
@@ -3203,6 +3209,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee6798b1838b6a0f69c007c133b8df5866302197e404e8b6ee8ed3e3a5e68dc6"
 dependencies = [
  "base64",
+ "bigdecimal",
  "bytes",
  "chrono",
  "crc",
@@ -3283,6 +3290,7 @@ checksum = "aa003f0038df784eb8fecbbac13affe3da23b45194bd57dba231c8f48199c526"
 dependencies = [
  "atoi",
  "base64",
+ "bigdecimal",
  "bitflags",
  "byteorder",
  "bytes",
@@ -3329,6 +3337,7 @@ checksum = "db58fcd5a53cf07c184b154801ff91347e4c30d17a3562a635ff028ad5deda46"
 dependencies = [
  "atoi",
  "base64",
+ "bigdecimal",
  "bitflags",
  "byteorder",
  "chrono",
@@ -3346,6 +3355,7 @@ dependencies = [
  "log",
  "md-5",
  "memchr",
+ "num-bigint",
  "once_cell",
  "rand 0.8.5",
  "rust_decimal",
@@ -4619,8 +4629,3 @@ name = "zmij"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0095ecd462946aa3927d9297b63ef82fb9a5316d7a37d134eeb36e58228615a"
-
-[[patch.unused]]
-name = "seaography"
-version = "2.0.0-rc.4"
-source = "git+https://github.com/SeaQL/seaography?branch=main#cb4b9bf726abf61d1a5c7fe3c3df99cae5fa8dde"

@@ -1,8 +1,8 @@
 [package]
-name = "axum-example-api"
+name = "rmr-api"
 version = "0.1.0"
-authors = ["Yoshiera Huang <huangjasper@126.com>"]
-edition = "2021"
+authors = ["Shane Bartosh <shanecody@rootsmusicreport.com>"]
+edition = "2024"
 publish = false
 
 [dependencies]

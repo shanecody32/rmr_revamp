@@ -1,19 +1,39 @@
 [package]
-name = "sea-orm-axum-example"
+name = "rmr_backend"
 version = "0.1.0"
 authors = ["Yoshiera Huang <huangjasper@126.com>"]
-edition = "2021"
+edition = "2024"
 publish = false
 
 [workspace]
 members = [".", "api", "service", "entity", "migration"]
 
-[dependencies]
-axum-example-api = { path = "api" }
-sea-orm = { version = "~2.0.0-rc", features = ["runtime-tokio-rustls", "macros", "debug-print"] }
-seaography = { version = "~2.0.0-rc", features = ["with-decimal", "with-chrono", "with-uuid", "field-snake-case"] }
+[workspace.dependencies]
+axum = { version = "0.8", features = ["macros"] }
+tokio = { version = "1", features = ["full"] }
+tower = { version = "0.5" }
+tower-http = { version = "0.6", features = ["fs", "cors"] }
+console_error_panic_hook = "0.1"
+wasm-bindgen = "0.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
-[patch.crates-io]
-sea-orm = { git = "https://github.com/SeaQL/sea-orm", branch = "master" }
-sea-orm-migration = { git = "https://github.com/SeaQL/sea-orm", branch = "master" }
-seaography = { git = "https://github.com/SeaQL/seaography", branch = "main" }
+# SeaORM dependencies
+sea-orm = { version = "=2.0.0-rc.21", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros"] }
+sea-orm-migration = { version = "=2.0.0-rc.21", features = ["sqlx-postgres", "runtime-tokio-rustls"] }
+sea-query = "=1.0.0-rc.22"
+sea-query-sqlx = "=0.8.0-rc.9"
+
+# Seaography dependencies
+seaography = "2.0.0-rc.5"
+async-graphql = { version = "7.0", features = ["dataloader"] }
+async-graphql-axum = "7.0"
+
+# Environment and configuration
+dotenvy = "0.15"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "2.0"
