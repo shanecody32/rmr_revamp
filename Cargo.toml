@@ -1,48 +1,31 @@
-[workspace]
-members = [".", "api", "service", "entity", "migration"]
-resolver = "3"
-
-[workspace.package]
-version = "0.1.0"
-authors = ["Yoshiera Huang <huangjasper@126.com>"]
+[package]
 edition = "2024"
-publish = false
+name = "rmr_graphql"
+version = "0.1.0"
 
-[workspace.dependencies]
-rmr-service = { path = "service" }
-rmr-api = { path = "api" }
-entity = { path = "entity" }
-migration = { path = "migration" }
-
-# SeaORM dependencies
-sea-orm = { version = "=2.0.0-rc.21", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros"] }
-sea-orm-migration = { version = "=2.0.0-rc.21", features = ["sqlx-postgres", "runtime-tokio-rustls"] }
-sea-orm-pro = { version = "0.1.0" }
+[dependencies]
+axum = { version = "0.8" }
+async-graphql-axum = { version = "7.0" }
+async-graphql = { version = "7.0", features = ["graphiql"] }
+dotenv = "0.15.0"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tracing = { version = "0" }
+tracing-subscriber = { version = "0.3.17" }
 sea-query = "=1.0.0-rc.22"
 sea-query-sqlx = "=0.8.0-rc.9"
+sea-orm-migration = { version = "=2.0.0-rc.21", features = ["sqlx-postgres", "runtime-tokio-rustls"] }
 
-# Seaography dependencies
-seaography = "2.0.0-rc.5"
-async-graphql = { version = "7.0", features = ["dataloader"] }
-async-graphql-axum = "7.0"
 
-axum = { version = "0.8", features = ["macros"] }
-tokio = { version = "1", features = ["full"] }
-tower = { version = "0.5" }
-tower-http = { version = "0.6", features = ["fs", "cors"] }
-tower-cookies = "0.11"
-console_error_panic_hook = "0.1"
-wasm-bindgen = "0.2"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-tera = { version = "1.20" }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+[dependencies.sea-orm]
+version = "=2.0.0-rc.21"
+features = ["sqlx-postgres", "runtime-tokio-native-tls", "seaography", "entity-registry"]
 
-# Environment and configuration
-dotenvy = "0.15"
+[dependencies.seaography]
+version = "~2.0.0-rc.5" # seaography version
+features = ["graphql-playground", "with-decimal", "with-chrono"]
 
-# Error handling
-anyhow = "1.0"
-thiserror = "2.0"
-async-std = { version = "1", features = ["attributes", "tokio1"] }
+[dev-dependencies]
+serde_json = { version = "1.0.103" }
+
+[workspace]
+members = []
