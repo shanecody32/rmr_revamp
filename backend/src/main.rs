@@ -7,6 +7,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod api;
 mod entities;
+mod http_headers;
 mod poller;
 
 #[tokio::main]

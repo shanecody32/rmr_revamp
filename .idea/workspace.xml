@@ -23,8 +23,14 @@
     </cargoProject>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="3c398155-dd71-4f4a-b7f6-1438bceb11e5" name="Changes" comment="Protest version.">
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+    <list default="true" id="3c398155-dd71-4f4a-b7f6-1438bceb11e5" name="Changes" comment="Works for some">
+      <change beforePath="$PROJECT_DIR$/backend/Cargo.lock" beforeDir="false" afterPath="$PROJECT_DIR$/backend/Cargo.lock" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/backend/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/api/connections_api.rs" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/api/connections_api.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/poller/mod.rs" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/poller/mod.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/poller/utils.rs" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/poller/utils.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/app/connections/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/app/connections/page.tsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -91,7 +97,7 @@
     "RunOnceActivity.typescript.service.memoryLimit.init": "true",
     "Shell Script.Unnamed.executor": "Run",
     "com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1": "true",
-    "git-widget-placeholder": "main",
+    "git-widget-placeholder": "NowPlayingTracker",
     "junie.onboarding.icon.badge.shown": "true",
     "last_opened_file_path": "/home/shaneb@ad.moabrmc.org/Projects/rmr/rmr_revamp/migrations/src",
     "list.type.of.created.stylesheet": "CSS",
@@ -174,7 +180,7 @@
       <workItem from="1766767483922" duration="15273000" />
       <workItem from="1766815900718" duration="126000" />
       <workItem from="1767896216233" duration="3324000" />
-      <workItem from="1767900505453" duration="10160000" />
+      <workItem from="1767900505453" duration="14755000" />
     </task>
     <task id="LOCAL-00001" summary="Protest version.">
       <option name="closed" value="true" />
@@ -184,7 +190,15 @@
       <option name="project" value="LOCAL" />
       <updated>1766816019338</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="Works for some">
+      <option name="closed" value="true" />
+      <created>1767910899988</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1767910899989</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -201,7 +215,7 @@
                   <entry key="branch">
                     <value>
                       <list>
-                        <option value="seaormpro-test" />
+                        <option value="NowPlayingTracker" />
                       </list>
                     </value>
                   </entry>
@@ -215,6 +229,7 @@
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Protest version." />
-    <option name="LAST_COMMIT_MESSAGE" value="Protest version." />
+    <MESSAGE value="Works for some" />
+    <option name="LAST_COMMIT_MESSAGE" value="Works for some" />
   </component>
 </project>

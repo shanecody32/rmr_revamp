@@ -10,6 +10,7 @@ use uuid::Uuid;
 use chrono::Utc;
 use crate::entities::{now_playing_connections, payload_mappings};
 use crate::api::AppState;
+use crate::http_headers::normalize_headers_for_storage;
 use crate::poller::utils::fetch_and_parse;
 
 pub fn router() -> Router<AppState> {
@@ -137,6 +138,10 @@ async fn create_connection(
     Json(payload): Json<CreateConnection>,
 ) -> Result<Json<now_playing_connections::Model>, StatusCode> {
     let now = Utc::now().fixed_offset();
+    let headers_json = normalize_headers_for_storage(
+        &payload.connection_type,
+        payload.headers_json,
+    );
     let conn = now_playing_connections::ActiveModel {
         id: Set(Uuid::new_v4()),
         station_id: Set(payload.station_id),
@@ -145,7 +150,7 @@ async fn create_connection(
         connection_type: Set(payload.connection_type),
         url: Set(payload.url),
         poll_interval_seconds: Set(payload.poll_interval_seconds),
-        headers_json: Set(payload.headers_json),
+        headers_json: Set(headers_json),
         enabled: Set(payload.enabled),
         created_at: Set(now),
         updated_at: Set(now),
@@ -185,13 +190,17 @@ async fn update_connection(
         .ok_or(StatusCode::NOT_FOUND)?;
 
     let mut conn: now_playing_connections::ActiveModel = conn.into();
+    let headers_json = normalize_headers_for_storage(
+        &payload.connection_type,
+        payload.headers_json,
+    );
     conn.station_id = Set(payload.station_id);
     conn.payload_mapping_id = Set(payload.payload_mapping_id);
     conn.name = Set(payload.name);
     conn.connection_type = Set(payload.connection_type);
     conn.url = Set(payload.url);
     conn.poll_interval_seconds = Set(payload.poll_interval_seconds);
-    conn.headers_json = Set(payload.headers_json);
+    conn.headers_json = Set(headers_json);
     conn.enabled = Set(payload.enabled);
     conn.updated_at = Set(Utc::now().fixed_offset());
 
@@ -281,6 +290,10 @@ async fn test_connection(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
+
+    if conn.connection_type.eq_ignore_ascii_case("ws_json") {
+        return Err(StatusCode::BAD_REQUEST);
+    }
 
     let mapping = if let Some(mapping_id) = conn.payload_mapping_id {
         payload_mappings::Entity::find_by_id(mapping_id)

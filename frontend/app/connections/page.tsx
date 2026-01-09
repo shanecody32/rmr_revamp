@@ -33,6 +33,7 @@ export default function ConnectionsPage() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [stations, setStations] = useState<Station[]>([]);
   const [mappings, setMappings] = useState<Mapping[]>([]);
+  const [headerDiscoveryStatus, setHeaderDiscoveryStatus] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     station_id: '',
     payload_mapping_id: '',
@@ -77,7 +78,11 @@ export default function ConnectionsPage() {
     e.preventDefault();
     let headers = null;
     try {
-      if (formData.headers_json) headers = JSON.parse(formData.headers_json);
+      if (formData.headers_json) {
+        headers = JSON.parse(formData.headers_json);
+      } else {
+        headers = buildSuggestedHeaders(formData.connection_type);
+      }
     } catch (e) {
       alert("Invalid JSON in headers");
       return;
@@ -102,6 +107,7 @@ export default function ConnectionsPage() {
     if (res.ok) {
       fetchConnections();
       setEditingId(null);
+      setHeaderDiscoveryStatus(null);
       setFormData({
         station_id: stations[0]?.id || '',
         payload_mapping_id: '',
@@ -119,6 +125,7 @@ export default function ConnectionsPage() {
 
   const handleEdit = (c: Connection) => {
     setEditingId(c.id);
+    setHeaderDiscoveryStatus(null);
     setFormData({
       station_id: c.station_id,
       payload_mapping_id: c.payload_mapping_id || '',
@@ -129,6 +136,59 @@ export default function ConnectionsPage() {
       headers_json: c.headers_json ? JSON.stringify(c.headers_json, null, 2) : '',
       enabled: c.enabled,
     });
+  };
+
+  function buildSuggestedHeaders(connectionType: string) {
+    switch (connectionType) {
+      case 'http_xml':
+        return {
+          Accept: 'application/xml, text/xml;q=0.9, */*;q=0.8',
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+        };
+      case 'http_text':
+        return {
+          Accept: 'text/plain, */*;q=0.8',
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+        };
+      case 'rss':
+        return {
+          Accept: 'application/rss+xml, application/xml;q=0.9, */*;q=0.8',
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+        };
+      case 'ws_json':
+      case 'http_json':
+      default:
+        return {
+          Accept: 'application/json, text/javascript, */*; q=0.01',
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+        };
+    }
+  }
+
+  const discoverHeaders = async () => {
+    if (!formData.url) {
+      alert("Please enter a URL first");
+      return;
+    }
+
+    const suggested = buildSuggestedHeaders(formData.connection_type);
+    setFormData(prev => ({ ...prev, headers_json: JSON.stringify(suggested, null, 2) }));
+    setHeaderDiscoveryStatus("Trying suggested headers...");
+
+    try {
+      const res = await fetch(formData.url, { method: 'GET', headers: suggested });
+      if (res.ok) {
+        setHeaderDiscoveryStatus(`Discovery fetch succeeded (status ${res.status}).`);
+      } else {
+        setHeaderDiscoveryStatus(`Discovery fetch returned status ${res.status}.`);
+      }
+    } catch (err) {
+      setHeaderDiscoveryStatus("Discovery fetch failed (likely CORS). Using suggested headers.");
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -189,6 +249,7 @@ export default function ConnectionsPage() {
               <option value="http_json">HTTP JSON</option>
               <option value="http_xml">HTTP XML</option>
               <option value="http_text">HTTP Text</option>
+              <option value="ws_json">WebSocket JSON</option>
               <option value="rss">RSS</option>
             </select>
           </div>
@@ -198,14 +259,22 @@ export default function ConnectionsPage() {
           </div>
           <div className="sm:col-span-6">
             <label className="block text-sm font-medium text-gray-700">Headers (JSON)</label>
-            <textarea value={formData.headers_json} onChange={e => setFormData({ ...formData, headers_json: e.target.value })} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-gray-900" placeholder='{"User-Agent": "MyPoller/1.0"}' />
+            <textarea value={formData.headers_json} onChange={e => setFormData({ ...formData, headers_json: e.target.value })} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white text-gray-900" placeholder='{"Accept": "application/json"}' />
+            <div className="mt-2 flex items-center space-x-2">
+              <button type="button" onClick={discoverHeaders} className="inline-flex justify-center py-1.5 px-3 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                Discover Headers
+              </button>
+              {headerDiscoveryStatus && (
+                <span className="text-xs text-gray-500">{headerDiscoveryStatus}</span>
+              )}
+            </div>
           </div>
           <div className="sm:col-span-6 flex space-x-2">
             <button type="submit" className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
               {editingId ? 'Update Connection' : 'Create Connection'}
             </button>
             {editingId && (
-              <button type="button" onClick={() => { setEditingId(null); setFormData({ station_id: stations[0]?.id || '', payload_mapping_id: '', name: '', connection_type: 'http_json', url: '', poll_interval_seconds: 30, headers_json: '', enabled: true }); }} className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+              <button type="button" onClick={() => { setEditingId(null); setHeaderDiscoveryStatus(null); setFormData({ station_id: stations[0]?.id || '', payload_mapping_id: '', name: '', connection_type: 'http_json', url: '', poll_interval_seconds: 30, headers_json: '', enabled: true }); }} className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
                 Cancel
               </button>
             )}
