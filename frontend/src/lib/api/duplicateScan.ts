@@ -1,11 +1,14 @@
 import {api} from './config';
-import type {BandResponse} from '@/types/api/bands';
+
+// Entity types that support duplicate scanning
+export type ScanEntityType = 'bands' | 'albums' | 'labels' | 'radio_stations' | 'staff_members';
 
 // Types
 export interface ScanStateResponse {
     id: number;
-    last_processed_band_id: number;
-    total_bands_scanned: number;
+    entity_type: string;
+    last_processed_id: number;
+    total_items_scanned: number;
     duplicates_found: number;
     is_running: boolean;
     started_at: string | null;
@@ -20,7 +23,7 @@ export interface ScanStateResponse {
     delay_between_batches_ms: number;
     continuous_mode: boolean;
     continuous_delay_minutes: number;
-    total_bands: number;
+    total_items: number;
     progress_percent: number;
 }
 
@@ -35,28 +38,7 @@ export interface StartScanRequest {
     reset_progress?: boolean;
 }
 
-export interface DuplicateCandidateResponse {
-    id: number;
-    band_1: BandResponse;
-    band_2: BandResponse;
-    similarity_score: number;
-    match_reasons: Record<string, unknown> | null;
-    status: string;
-    reviewed_by: number | null;
-    reviewed_at: string | null;
-    detected_at: string;
-}
-
-export interface MatchSummary {
-    candidate_id: number;
-    matched_band_id: number;
-    matched_band_name: string;
-    matched_band_slug: string;
-    similarity_score: number;
-    status: string;
-}
-
-export interface BandSummary {
+export interface EntitySummary {
     id: number;
     name: string;
     slug: string;
@@ -64,8 +46,17 @@ export interface BandSummary {
     approved: number;
 }
 
+export interface MatchSummary {
+    candidate_id: number;
+    matched_entity_id: number;
+    matched_entity_name: string;
+    matched_entity_slug: string;
+    similarity_score: number;
+    status: string;
+}
+
 export interface GroupedDuplicateResponse {
-    band: BandSummary;
+    entity: EntitySummary;
     match_count: number;
     highest_score: number;
     pending_count: number;
@@ -89,49 +80,44 @@ export interface CandidateFilterParams {
     status?: string;
     min_score?: number;
     max_score?: number;
-    band_id?: number;
+    entity_id?: number;
 }
 
-// API functions
-export async function getScanState(): Promise<ScanStateResponse> {
-    const response = await api.get<ScanStateResponse>('/duplicate-scan/state');
+// API functions - all parameterized by entity type
+export async function getScanState(entityType: ScanEntityType): Promise<ScanStateResponse> {
+    const response = await api.get<ScanStateResponse>(`/duplicate-scan/${entityType}/state`);
     return response.data;
 }
 
-export async function startScan(request: StartScanRequest = {}): Promise<ScanStateResponse> {
-    const response = await api.post<ScanStateResponse>('/duplicate-scan/start', request);
+export async function startScan(entityType: ScanEntityType, request: StartScanRequest = {}): Promise<ScanStateResponse> {
+    const response = await api.post<ScanStateResponse>(`/duplicate-scan/${entityType}/start`, request);
     return response.data;
 }
 
-export async function stopScan(): Promise<ScanStateResponse> {
-    const response = await api.post<ScanStateResponse>('/duplicate-scan/stop');
+export async function stopScan(entityType: ScanEntityType): Promise<ScanStateResponse> {
+    const response = await api.post<ScanStateResponse>(`/duplicate-scan/${entityType}/stop`);
     return response.data;
 }
 
-export async function clearCandidates(pendingOnly: boolean = false): Promise<{ deleted: number }> {
-    const response = await api.post<{ deleted: number }>('/duplicate-scan/clear', { pending_only: pendingOnly });
+export async function clearCandidates(entityType: ScanEntityType, pendingOnly: boolean = false): Promise<{ deleted: number }> {
+    const response = await api.post<{ deleted: number }>(`/duplicate-scan/${entityType}/clear`, { pending_only: pendingOnly });
     return response.data;
 }
 
-export async function getCandidates(params: CandidateFilterParams = {}): Promise<PaginatedResponse<DuplicateCandidateResponse>> {
-    const response = await api.get<PaginatedResponse<DuplicateCandidateResponse>>('/duplicate-scan/candidates', { params });
+export async function getCandidatesGrouped(entityType: ScanEntityType, params: CandidateFilterParams = {}): Promise<PaginatedResponse<GroupedDuplicateResponse>> {
+    const response = await api.get<PaginatedResponse<GroupedDuplicateResponse>>(`/duplicate-scan/${entityType}/candidates/grouped`, { params });
     return response.data;
 }
 
-export async function getCandidatesGrouped(params: CandidateFilterParams = {}): Promise<PaginatedResponse<GroupedDuplicateResponse>> {
-    const response = await api.get<PaginatedResponse<GroupedDuplicateResponse>>('/duplicate-scan/candidates/grouped', { params });
-    return response.data;
+export async function updateCandidateStatus(entityType: ScanEntityType, candidateId: number, status: string, userId?: number): Promise<void> {
+    await api.put(`/duplicate-scan/${entityType}/candidates/${candidateId}`, { status, user_id: userId });
 }
 
-export async function updateCandidateStatus(candidateId: number, status: string, userId?: number): Promise<void> {
-    await api.put(`/duplicate-scan/candidates/${candidateId}`, { status, user_id: userId });
+export async function restoreCandidate(entityType: ScanEntityType, candidateId: number): Promise<void> {
+    await api.put(`/duplicate-scan/${entityType}/candidates/${candidateId}/restore`);
 }
 
-export async function restoreCandidate(candidateId: number): Promise<void> {
-    await api.put(`/duplicate-scan/candidates/${candidateId}/restore`);
-}
-
-export async function getBandMatches(bandId: number): Promise<DuplicateCandidateResponse[]> {
-    const response = await api.get<DuplicateCandidateResponse[]>(`/duplicate-scan/bands/${bandId}/matches`);
+export async function getEntityMatches(entityType: ScanEntityType, entityId: number): Promise<unknown[]> {
+    const response = await api.get(`/duplicate-scan/${entityType}/entities/${entityId}/matches`);
     return response.data;
 }

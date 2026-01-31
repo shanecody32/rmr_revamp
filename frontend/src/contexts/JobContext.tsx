@@ -1,18 +1,24 @@
 'use client'
 
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { systemApi } from '@/lib/api/system';
 import type { BackfillJobState, TaskJobState } from '@/types/api/system';
-import { getScanState, type ScanStateResponse } from '@/lib/api/duplicateScan';
+import { getScanState, type ScanStateResponse, type ScanEntityType } from '@/lib/api/duplicateScan';
 import { useToast } from '@/hooks/ui/use-toast';
 
 interface JobContextType {
     backfillProgress: BackfillJobState | null;
     genreUpdateProgress: TaskJobState | null;
-    duplicateScanProgress: ScanStateResponse | null;
+    /** Per-entity scan progress, keyed by entity_type string */
+    duplicateScanProgress: Record<string, ScanStateResponse>;
     isBackfillRunning: boolean;
     isGenreUpdateRunning: boolean;
-    isDuplicateScanRunning: boolean;
+    /** Check if a specific entity type scan is running */
+    isDuplicateScanRunning: (entityType: ScanEntityType) => boolean;
+    /** Check if any duplicate scan is running */
+    isAnyDuplicateScanRunning: boolean;
+    /** Get scan state for a specific entity type */
+    getScanProgress: (entityType: ScanEntityType) => ScanStateResponse | null;
     refreshProgress: () => Promise<void>;
 }
 
@@ -21,22 +27,21 @@ const JobContext = createContext<JobContextType | undefined>(undefined);
 export function JobProvider({ children }: { children: React.ReactNode }) {
     const [backfillProgress, setBackfillProgress] = useState<BackfillJobState | null>(null);
     const [genreUpdateProgress, setGenreUpdateProgress] = useState<TaskJobState | null>(null);
-    const [duplicateScanProgress, setDuplicateScanProgress] = useState<ScanStateResponse | null>(null);
+    const [duplicateScanProgress, setDuplicateScanProgress] = useState<Record<string, ScanStateResponse>>({});
     const { toast } = useToast();
 
     const prevBackfillRunning = useRef<boolean>(false);
     const prevGenreRunning = useRef<boolean>(false);
-    const prevDupScanRunning = useRef<boolean>(false);
+    const prevDupScansRunning = useRef<Record<string, boolean>>({});
     const isInitialMount = useRef<boolean>(true);
 
     const fetchProgress = async () => {
         try {
-            const [backfillData, genreData, dupScanData] = await Promise.all([
+            const [backfillData, genreData] = await Promise.all([
                 systemApi.getBackfillProgress(),
                 systemApi.getAlbumGenreUpdateProgress(),
-                getScanState().catch(() => null),
             ]);
-            
+
             if (!isInitialMount.current) {
                 // Check for backfill completion
                 if (prevBackfillRunning.current && !backfillData.is_running) {
@@ -73,32 +78,10 @@ export function JobProvider({ children }: { children: React.ReactNode }) {
                         });
                     }
                 }
-
-                // Check for duplicate scan completion
-                if (dupScanData && prevDupScanRunning.current && !dupScanData.is_running) {
-                    if (dupScanData.last_error) {
-                        toast({
-                            variant: 'destructive',
-                            title: 'Duplicate Scan Failed',
-                            description: dupScanData.last_error,
-                            duration: 10
-                        });
-                    } else {
-                        toast({
-                            title: 'Duplicate Scan Complete',
-                            description: `Scan finished. ${dupScanData.duplicates_found} duplicates found.`,
-                            duration: 10
-                        });
-                    }
-                }
             }
 
             setBackfillProgress(backfillData);
             setGenreUpdateProgress(genreData);
-            if (dupScanData) {
-                setDuplicateScanProgress(dupScanData);
-                prevDupScanRunning.current = dupScanData.is_running;
-            }
             prevBackfillRunning.current = backfillData.is_running;
             prevGenreRunning.current = genreData.is_running;
             isInitialMount.current = false;
@@ -119,7 +102,7 @@ export function JobProvider({ children }: { children: React.ReactNode }) {
                 const data = JSON.parse(event.data) as {
                     backfill: BackfillJobState;
                     genre_update: TaskJobState;
-                    duplicate_scan: ScanStateResponse | null;
+                    duplicate_scans: ScanStateResponse[];
                 };
 
                 if (!isInitialMount.current) {
@@ -159,31 +142,43 @@ export function JobProvider({ children }: { children: React.ReactNode }) {
                         }
                     }
 
-                    // Check for duplicate scan completion
-                    if (data.duplicate_scan && prevDupScanRunning.current && !data.duplicate_scan.is_running) {
-                        if (data.duplicate_scan.last_error) {
-                            toast({
-                                variant: 'destructive',
-                                title: 'Duplicate Scan Failed',
-                                description: data.duplicate_scan.last_error,
-                                duration: 10
-                            });
-                        } else {
-                            toast({
-                                title: 'Duplicate Scan Complete',
-                                description: `Scan finished. ${data.duplicate_scan.duplicates_found} duplicates found.`,
-                                duration: 10
-                            });
+                    // Check for duplicate scan completions per entity type
+                    for (const [entityType, wasRunning] of Object.entries(prevDupScansRunning.current)) {
+                        if (wasRunning) {
+                            const stillRunning = data.duplicate_scans.find(s => s.entity_type === entityType);
+                            if (!stillRunning) {
+                                // This entity type scan has completed (no longer in the running list)
+                                toast({
+                                    title: 'Duplicate Scan Complete',
+                                    description: `${entityType} duplicate scan has finished.`,
+                                    duration: 10
+                                });
+                            }
                         }
                     }
                 }
 
                 setBackfillProgress(data.backfill);
                 setGenreUpdateProgress(data.genre_update);
-                if (data.duplicate_scan) {
-                    setDuplicateScanProgress(data.duplicate_scan);
-                    prevDupScanRunning.current = data.duplicate_scan.is_running;
+
+                // Update per-entity scan progress
+                if (data.duplicate_scans.length > 0) {
+                    setDuplicateScanProgress(prev => {
+                        const next = { ...prev };
+                        for (const scan of data.duplicate_scans) {
+                            next[scan.entity_type] = scan;
+                        }
+                        return next;
+                    });
                 }
+
+                // Track which entity scans are running
+                const newRunning: Record<string, boolean> = {};
+                for (const scan of data.duplicate_scans) {
+                    newRunning[scan.entity_type] = scan.is_running;
+                }
+                prevDupScansRunning.current = newRunning;
+
                 prevBackfillRunning.current = data.backfill.is_running;
                 prevGenreRunning.current = data.genre_update.is_running;
                 isInitialMount.current = false;
@@ -199,6 +194,17 @@ export function JobProvider({ children }: { children: React.ReactNode }) {
         return () => eventSource.close();
     }, []);
 
+    const isDuplicateScanRunning = useCallback((entityType: ScanEntityType): boolean => {
+        const state = duplicateScanProgress[entityType];
+        return state?.is_running || false;
+    }, [duplicateScanProgress]);
+
+    const isAnyDuplicateScanRunning = Object.values(duplicateScanProgress).some(s => s.is_running);
+
+    const getScanProgress = useCallback((entityType: ScanEntityType): ScanStateResponse | null => {
+        return duplicateScanProgress[entityType] || null;
+    }, [duplicateScanProgress]);
+
     return (
         <JobContext.Provider value={{
             backfillProgress,
@@ -206,7 +212,9 @@ export function JobProvider({ children }: { children: React.ReactNode }) {
             duplicateScanProgress,
             isBackfillRunning: backfillProgress?.is_running || false,
             isGenreUpdateRunning: genreUpdateProgress?.is_running || false,
-            isDuplicateScanRunning: duplicateScanProgress?.is_running || false,
+            isDuplicateScanRunning,
+            isAnyDuplicateScanRunning,
+            getScanProgress,
             refreshProgress: fetchProgress
         }}>
             {children}

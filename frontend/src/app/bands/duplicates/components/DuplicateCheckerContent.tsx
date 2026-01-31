@@ -40,7 +40,7 @@ import {
     startScan,
     stopScan,
     updateCandidateStatus,
-    type BandSummary,
+    type EntitySummary,
     type GroupedDuplicateResponse,
     type MatchSummary,
     type ScanStateResponse,
@@ -56,7 +56,9 @@ const {Title, Text} = Typography;
 export default function DuplicateCheckerContent() {
     const {message} = App.useApp();
     const router = useRouter();
-    const {duplicateScanProgress, isDuplicateScanRunning} = useJobs();
+    const {isDuplicateScanRunning, getScanProgress} = useJobs();
+    const isRunning = isDuplicateScanRunning('bands');
+    const scanProgressFromSSE = getScanProgress('bands');
     const [scanState, setScanState] = useState<ScanStateResponse | null>(null);
     const [loading, setLoading] = useState(true);
     const [groupedResults, setGroupedResults] = useState<GroupedDuplicateResponse[]>([]);
@@ -94,24 +96,24 @@ export default function DuplicateCheckerContent() {
 
     // Sync scan state from SSE context
     useEffect(() => {
-        if (duplicateScanProgress) {
-            setScanState(duplicateScanProgress);
+        if (scanProgressFromSSE) {
+            setScanState(scanProgressFromSSE);
         }
-    }, [duplicateScanProgress]);
+    }, [scanProgressFromSSE]);
 
     // Detect scan completion via context
     useEffect(() => {
-        if (prevScanRunning.current && !isDuplicateScanRunning) {
+        if (prevScanRunning.current && !isRunning) {
             message.success('Scan completed');
             loadResults();
         }
-        prevScanRunning.current = isDuplicateScanRunning;
-    }, [isDuplicateScanRunning]);
+        prevScanRunning.current = isRunning;
+    }, [isRunning]);
 
     const loadScanState = async () => {
         try {
             setLoading(true);
-            const state = await getScanState();
+            const state = await getScanState('bands');
             setScanState(state);
 
             // Sync settings from state
@@ -135,7 +137,7 @@ export default function DuplicateCheckerContent() {
     const loadResults = useCallback(async (page = 1) => {
         try {
             setResultsLoading(true);
-            const response = await getCandidatesGrouped({
+            const response = await getCandidatesGrouped('bands', {
                 page,
                 page_size: pagination.pageSize,
                 status: statusFilter || undefined,
@@ -159,7 +161,7 @@ export default function DuplicateCheckerContent() {
 
     const handleStartScan = async () => {
         try {
-            await startScan(settings);
+            await startScan('bands', settings);
             message.success('Scan started');
         } catch (error: any) {
             message.error(error.response?.data || 'Failed to start scan');
@@ -168,7 +170,7 @@ export default function DuplicateCheckerContent() {
 
     const handleStopScan = async () => {
         try {
-            await stopScan();
+            await stopScan('bands');
             message.success('Scan stopped');
             loadResults();
         } catch (error) {
@@ -178,7 +180,7 @@ export default function DuplicateCheckerContent() {
 
     const handleClearCandidates = async (pendingOnly: boolean) => {
         try {
-            const result = await clearCandidates(pendingOnly);
+            const result = await clearCandidates('bands', pendingOnly);
             message.success(`Deleted ${result.deleted} candidates`);
             loadResults();
             loadScanState();
@@ -189,7 +191,7 @@ export default function DuplicateCheckerContent() {
 
     const handleDismiss = async (candidateId: number) => {
         try {
-            await updateCandidateStatus(candidateId, 'dismissed');
+            await updateCandidateStatus('bands', candidateId, 'dismissed');
             message.success('Candidate dismissed');
             loadResults();
         } catch (error) {
@@ -199,7 +201,7 @@ export default function DuplicateCheckerContent() {
 
     const handleRestore = async (candidateId: number) => {
         try {
-            await restoreCandidate(candidateId);
+            await restoreCandidate('bands', candidateId);
             message.success('Candidate restored');
             loadResults();
         } catch (error) {
@@ -217,23 +219,23 @@ export default function DuplicateCheckerContent() {
     }), [settings.jw_weight, settings.dice_weight, settings.min_similarity]);
 
     // Handle review button click - opens the comparison modal with potential duplicates
-    const handleReviewClick = async (bandSummary: BandSummary, matches: MatchSummary[]) => {
+    const handleReviewClick = async (entitySummary: EntitySummary, matches: MatchSummary[]) => {
         try {
             setLoadingSimilarBands(true);
-            setReviewingBandId(bandSummary.id);
+            setReviewingBandId(entitySummary.id);
 
             // Fetch full band details
-            const fullBand = await fetchBandById(bandSummary.id);
+            const fullBand = await fetchBandById(entitySummary.id);
             setBandToReview(fullBand);
 
             // Get IDs of potential duplicates from the matches
-            const matchedBandIds = matches.map(m => m.matched_band_id);
+            const matchedBandIds = matches.map(m => m.matched_entity_id);
             setPreSelectedBandIds(matchedBandIds);
 
             // Search for similar bands using the same settings as the scan
             const similar = await fetchSimilarBands({
-                search_term: bandSummary.name,
-                existing_id: bandSummary.id,
+                search_term: entitySummary.name,
+                existing_id: entitySummary.id,
                 jw_weight: searchSettingsForModal.jw_weight,
                 dice_weight: searchSettingsForModal.dice_weight,
                 min_similarity: searchSettingsForModal.min_similarity,
@@ -241,7 +243,7 @@ export default function DuplicateCheckerContent() {
             });
 
             // Filter out the band itself and sort with pre-selected at top
-            const filteredSimilar = similar.filter(b => b.id !== bandSummary.id);
+            const filteredSimilar = similar.filter(b => b.id !== entitySummary.id);
 
             // Sort so pre-selected (detected duplicates) appear first
             filteredSimilar.sort((a, b) => {
@@ -331,8 +333,8 @@ export default function DuplicateCheckerContent() {
             title: 'Band',
             key: 'band',
             render: (_, record) => (
-                <Link href={`/bands/view/${record.band.id}/${record.band.slug}?from=duplicates`}>
-                    <Text strong>{record.band.name}</Text>
+                <Link href={`/bands/view/${record.entity.id}/${record.entity.slug}?from=duplicates`}>
+                    <Text strong>{record.entity.name}</Text>
                 </Link>
             ),
         },
@@ -379,8 +381,8 @@ export default function DuplicateCheckerContent() {
                 <Button
                     type="primary"
                     size="small"
-                    loading={reviewingBandId === record.band.id}
-                    onClick={() => handleReviewClick(record.band, record.matches)}
+                    loading={reviewingBandId === record.entity.id}
+                    onClick={() => handleReviewClick(record.entity, record.matches)}
                 >
                     Review
                 </Button>
@@ -395,8 +397,8 @@ export default function DuplicateCheckerContent() {
                 title: 'Matched Band',
                 key: 'matched_band',
                 render: (_, match) => (
-                    <Link href={`/bands/view/${match.matched_band_id}/${match.matched_band_slug || 'band'}?from=duplicates`}>
-                        {match.matched_band_name}
+                    <Link href={`/bands/view/${match.matched_entity_id}/${match.matched_entity_slug || 'band'}?from=duplicates`}>
+                        {match.matched_entity_name}
                     </Link>
                 ),
             },
@@ -476,8 +478,8 @@ export default function DuplicateCheckerContent() {
                             <Col span={6}>
                                 <Statistic
                                     title="Bands Scanned"
-                                    value={scanState?.total_bands_scanned || 0}
-                                    suffix={`/ ${scanState?.total_bands || 0}`}
+                                    value={scanState?.total_items_scanned || 0}
+                                    suffix={`/ ${scanState?.total_items || 0}`}
                                 />
                             </Col>
                             <Col span={6}>
@@ -521,7 +523,7 @@ export default function DuplicateCheckerContent() {
                         )}
 
                         <Space className="mt-4">
-                            {!isDuplicateScanRunning ? (
+                            {!isRunning ? (
                                 <Button
                                     type="primary"
                                     icon={<CaretRightOutlined />}
@@ -541,14 +543,14 @@ export default function DuplicateCheckerContent() {
                             <Button
                                 icon={<ReloadOutlined />}
                                 onClick={loadScanState}
-                                disabled={isDuplicateScanRunning}
+                                disabled={isRunning}
                             >
                                 Refresh
                             </Button>
                             <Button
                                 icon={<DeleteOutlined />}
                                 onClick={() => handleClearCandidates(true)}
-                                disabled={isDuplicateScanRunning}
+                                disabled={isRunning}
                             >
                                 Clear Pending
                             </Button>
@@ -658,7 +660,7 @@ export default function DuplicateCheckerContent() {
                 <Table
                     columns={columns}
                     dataSource={groupedResults}
-                    rowKey={(record) => record.band.id}
+                    rowKey={(record) => record.entity.id}
                     loading={resultsLoading}
                     expandable={{
                         expandedRowRender,

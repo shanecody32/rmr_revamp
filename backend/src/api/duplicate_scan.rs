@@ -7,8 +7,9 @@ use axum::{
 };
 use crate::job_state::AppState;
 use crate::models::band_duplicate_candidates::CandidateStatus;
+use crate::models::duplicate_scan_state::ScanEntityType;
 use crate::services::duplicate_scan_service::{
-    CandidateFilterParams, DuplicateCandidateResponse, DuplicateScanService,
+    CandidateFilterParams, DuplicateScanService,
     GroupedDuplicateResponse, ScanStateResponse, StartScanRequest,
 };
 use crate::services::types::PaginatedResponse;
@@ -19,27 +20,44 @@ use sea_orm::DbErr;
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/state", get(get_scan_state))
-        .route("/start", post(start_scan))
-        .route("/stop", post(stop_scan))
-        .route("/clear", post(clear_candidates))
-        .route("/candidates", get(get_candidates))
-        .route("/candidates/grouped", get(get_candidates_grouped))
-        .route("/candidates/{id}", put(update_candidate_status))
-        .route("/candidates/{id}/restore", put(restore_candidate))
-        .route("/bands/{id}/matches", get(get_band_matches))
+        // New entity-type-parameterized routes
+        .route("/{entity_type}/state", get(get_scan_state))
+        .route("/{entity_type}/start", post(start_scan))
+        .route("/{entity_type}/stop", post(stop_scan))
+        .route("/{entity_type}/clear", post(clear_candidates))
+        .route("/{entity_type}/candidates/grouped", get(get_candidates_grouped))
+        .route("/{entity_type}/candidates/{id}", put(update_candidate_status))
+        .route("/{entity_type}/candidates/{id}/restore", put(restore_candidate))
+        .route("/{entity_type}/entities/{id}/matches", get(get_entity_matches))
+}
+
+fn parse_entity_type(entity_type: &str) -> Result<ScanEntityType, (StatusCode, String)> {
+    entity_type
+        .parse::<ScanEntityType>()
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))
 }
 
 #[utoipa::path(
     get,
-    path = "/duplicate-scan/state",
+    path = "/duplicate-scan/{entity_type}/state",
+    params(
+        ("entity_type" = String, Path, description = "Entity type (bands, albums, labels, radio_stations, staff_members)")
+    ),
     responses(
         (status = 200, description = "Current scan state", body = ScanStateResponse),
+        (status = 400, description = "Invalid entity type"),
         (status = 500, description = "Internal server error")
     )
 )]
-pub(crate) async fn get_scan_state(State(state): State<AppState>) -> impl IntoResponse {
-    match DuplicateScanService::get_scan_state(&state.db).await {
+pub(crate) async fn get_scan_state(
+    State(state): State<AppState>,
+    Path(entity_type): Path<String>,
+) -> impl IntoResponse {
+    let et = match parse_entity_type(&entity_type) {
+        Ok(et) => et,
+        Err((code, msg)) => return (code, msg).into_response(),
+    };
+    match DuplicateScanService::get_scan_state(&state.db, &et).await {
         Ok(scan_state) => (StatusCode::OK, Json(scan_state)).into_response(),
         Err(e) => handle_internal_error(e),
     }
@@ -47,29 +65,39 @@ pub(crate) async fn get_scan_state(State(state): State<AppState>) -> impl IntoRe
 
 #[utoipa::path(
     post,
-    path = "/duplicate-scan/start",
+    path = "/duplicate-scan/{entity_type}/start",
+    params(
+        ("entity_type" = String, Path, description = "Entity type")
+    ),
     request_body = StartScanRequest,
     responses(
         (status = 202, description = "Scan started in background", body = ScanStateResponse),
-        (status = 400, description = "Scan already running"),
+        (status = 400, description = "Scan already running or invalid entity type"),
         (status = 500, description = "Internal server error")
     )
 )]
 pub(crate) async fn start_scan(
     State(state): State<AppState>,
+    Path(entity_type): Path<String>,
     Json(request): Json<StartScanRequest>,
 ) -> impl IntoResponse {
-    match DuplicateScanService::start_scan(&state.db, request).await {
+    let et = match parse_entity_type(&entity_type) {
+        Ok(et) => et,
+        Err((code, msg)) => return (code, msg).into_response(),
+    };
+    match DuplicateScanService::start_scan(&state.db, &et, request).await {
         Ok(scan_state) => {
-            tracing::info!("Duplicate scan job requested to start");
-            *state.duplicate_scan_running.write().await = true;
+            tracing::info!("Duplicate scan job requested to start for {}", et.display_name());
+            state.set_scan_running(&et.to_string(), true).await;
             let db = state.db.clone();
-            let flag = state.duplicate_scan_running.clone();
+            let scans_running = state.duplicate_scans_running.clone();
+            let et_string = et.to_string();
             tokio::spawn(async move {
-                if let Err(e) = DuplicateScanService::run_scan_background(db).await {
+                if let Err(e) = DuplicateScanService::run_scan_background(db, et).await {
                     tracing::error!("Duplicate scan background job failed: {}", e);
                 }
-                *flag.write().await = false;
+                let mut map = scans_running.write().await;
+                map.insert(et_string, false);
             });
             (StatusCode::ACCEPTED, Json(scan_state)).into_response()
         }
@@ -82,16 +110,27 @@ pub(crate) async fn start_scan(
 
 #[utoipa::path(
     post,
-    path = "/duplicate-scan/stop",
+    path = "/duplicate-scan/{entity_type}/stop",
+    params(
+        ("entity_type" = String, Path, description = "Entity type")
+    ),
     responses(
         (status = 200, description = "Scan stopped", body = ScanStateResponse),
+        (status = 400, description = "Invalid entity type"),
         (status = 500, description = "Internal server error")
     )
 )]
-pub(crate) async fn stop_scan(State(state): State<AppState>) -> impl IntoResponse {
-    match DuplicateScanService::stop_scan(&state.db).await {
+pub(crate) async fn stop_scan(
+    State(state): State<AppState>,
+    Path(entity_type): Path<String>,
+) -> impl IntoResponse {
+    let et = match parse_entity_type(&entity_type) {
+        Ok(et) => et,
+        Err((code, msg)) => return (code, msg).into_response(),
+    };
+    match DuplicateScanService::stop_scan(&state.db, &et).await {
         Ok(scan_state) => {
-            *state.duplicate_scan_running.write().await = false;
+            state.set_scan_running(&et.to_string(), false).await;
             (StatusCode::OK, Json(scan_state)).into_response()
         }
         Err(e) => handle_internal_error(e),
@@ -105,17 +144,26 @@ pub struct ClearCandidatesRequest {
 
 #[utoipa::path(
     post,
-    path = "/duplicate-scan/clear",
+    path = "/duplicate-scan/{entity_type}/clear",
+    params(
+        ("entity_type" = String, Path, description = "Entity type")
+    ),
     responses(
         (status = 200, description = "Candidates cleared"),
+        (status = 400, description = "Invalid entity type"),
         (status = 500, description = "Internal server error")
     )
 )]
 pub(crate) async fn clear_candidates(
     State(state): State<AppState>,
+    Path(entity_type): Path<String>,
     Json(request): Json<ClearCandidatesRequest>,
 ) -> impl IntoResponse {
-    match DuplicateScanService::clear_candidates(&state.db, request.pending_only.unwrap_or(false))
+    let et = match parse_entity_type(&entity_type) {
+        Ok(et) => et,
+        Err((code, msg)) => return (code, msg).into_response(),
+    };
+    match DuplicateScanService::clear_candidates(&state.db, &et, request.pending_only.unwrap_or(false))
         .await
     {
         Ok(count) => (
@@ -129,37 +177,27 @@ pub(crate) async fn clear_candidates(
 
 #[utoipa::path(
     get,
-    path = "/duplicate-scan/candidates",
-    params(CandidateFilterParams),
-    responses(
-        (status = 200, description = "List of candidates", body = PaginatedResponse<DuplicateCandidateResponse>),
-        (status = 500, description = "Internal server error")
-    )
-)]
-pub(crate) async fn get_candidates(
-    State(state): State<AppState>,
-    Query(params): Query<CandidateFilterParams>,
-) -> impl IntoResponse {
-    match DuplicateScanService::get_candidates(&state.db, params).await {
-        Ok(paginated) => (StatusCode::OK, Json(paginated)).into_response(),
-        Err(e) => handle_internal_error(e),
-    }
-}
-
-#[utoipa::path(
-    get,
-    path = "/duplicate-scan/candidates/grouped",
-    params(CandidateFilterParams),
+    path = "/duplicate-scan/{entity_type}/candidates/grouped",
+    params(
+        ("entity_type" = String, Path, description = "Entity type"),
+        CandidateFilterParams
+    ),
     responses(
         (status = 200, description = "Grouped candidates", body = PaginatedResponse<GroupedDuplicateResponse>),
+        (status = 400, description = "Invalid entity type"),
         (status = 500, description = "Internal server error")
     )
 )]
 pub(crate) async fn get_candidates_grouped(
     State(state): State<AppState>,
+    Path(entity_type): Path<String>,
     Query(params): Query<CandidateFilterParams>,
 ) -> impl IntoResponse {
-    match DuplicateScanService::get_candidates_grouped(&state.db, params).await {
+    let et = match parse_entity_type(&entity_type) {
+        Ok(et) => et,
+        Err((code, msg)) => return (code, msg).into_response(),
+    };
+    match DuplicateScanService::get_candidates_grouped(&state.db, &et, params).await {
         Ok(paginated) => (StatusCode::OK, Json(paginated)).into_response(),
         Err(e) => handle_internal_error(e),
     }
@@ -173,67 +211,85 @@ pub struct UpdateStatusRequest {
 
 #[utoipa::path(
     put,
-    path = "/duplicate-scan/candidates/{id}",
+    path = "/duplicate-scan/{entity_type}/candidates/{id}",
     params(
+        ("entity_type" = String, Path, description = "Entity type"),
         ("id" = u32, Path, description = "Candidate ID")
     ),
     request_body = UpdateStatusRequest,
     responses(
         (status = 200, description = "Status updated"),
+        (status = 400, description = "Invalid entity type"),
         (status = 500, description = "Internal server error")
     )
 )]
 pub(crate) async fn update_candidate_status(
     State(state): State<AppState>,
-    Path(id): Path<u32>,
+    Path((entity_type, id)): Path<(String, u32)>,
     Json(request): Json<UpdateStatusRequest>,
 ) -> impl IntoResponse {
+    let et = match parse_entity_type(&entity_type) {
+        Ok(et) => et,
+        Err((code, msg)) => return (code, msg).into_response(),
+    };
     let status = CandidateStatus::from(request.status.as_str());
-    match DuplicateScanService::update_candidate_status(&state.db, id, status, request.user_id)
+    match DuplicateScanService::update_candidate_status(&state.db, &et, id, status, request.user_id)
         .await
     {
-        Ok(candidate) => (StatusCode::OK, Json(candidate)).into_response(),
+        Ok(()) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
         Err(e) => handle_internal_error(e),
     }
 }
 
 #[utoipa::path(
     put,
-    path = "/duplicate-scan/candidates/{id}/restore",
+    path = "/duplicate-scan/{entity_type}/candidates/{id}/restore",
     params(
+        ("entity_type" = String, Path, description = "Entity type"),
         ("id" = u32, Path, description = "Candidate ID")
     ),
     responses(
         (status = 200, description = "Candidate restored to pending"),
+        (status = 400, description = "Invalid entity type"),
         (status = 500, description = "Internal server error")
     )
 )]
 pub(crate) async fn restore_candidate(
     State(state): State<AppState>,
-    Path(id): Path<u32>,
+    Path((entity_type, id)): Path<(String, u32)>,
 ) -> impl IntoResponse {
-    match DuplicateScanService::restore_candidate(&state.db, id).await {
-        Ok(candidate) => (StatusCode::OK, Json(candidate)).into_response(),
+    let et = match parse_entity_type(&entity_type) {
+        Ok(et) => et,
+        Err((code, msg)) => return (code, msg).into_response(),
+    };
+    match DuplicateScanService::restore_candidate(&state.db, &et, id).await {
+        Ok(()) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
         Err(e) => handle_internal_error(e),
     }
 }
 
 #[utoipa::path(
     get,
-    path = "/duplicate-scan/bands/{id}/matches",
+    path = "/duplicate-scan/{entity_type}/entities/{id}/matches",
     params(
-        ("id" = u32, Path, description = "Band ID")
+        ("entity_type" = String, Path, description = "Entity type"),
+        ("id" = u32, Path, description = "Entity ID")
     ),
     responses(
-        (status = 200, description = "Band matches", body = [DuplicateCandidateResponse]),
+        (status = 200, description = "Entity matches"),
+        (status = 400, description = "Invalid entity type"),
         (status = 500, description = "Internal server error")
     )
 )]
-pub(crate) async fn get_band_matches(
+pub(crate) async fn get_entity_matches(
     State(state): State<AppState>,
-    Path(id): Path<u32>,
+    Path((entity_type, id)): Path<(String, u32)>,
 ) -> impl IntoResponse {
-    match DuplicateScanService::get_band_matches(&state.db, id).await {
+    let et = match parse_entity_type(&entity_type) {
+        Ok(et) => et,
+        Err((code, msg)) => return (code, msg).into_response(),
+    };
+    match DuplicateScanService::get_entity_matches(&state.db, &et, id).await {
         Ok(matches) => (StatusCode::OK, Json(matches)).into_response(),
         Err(e) => handle_internal_error(e),
     }

@@ -1,4 +1,5 @@
 use sea_orm::DatabaseConnection;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use serde::Serialize;
@@ -44,7 +45,28 @@ pub struct AppState {
     pub db: DatabaseConnection,
     pub backfill_job_state: Arc<RwLock<BackfillJobState>>,
     pub album_genre_update_job_state: Arc<RwLock<TaskJobState>>,
-    pub duplicate_scan_running: Arc<RwLock<bool>>,
+    /// Per-entity-type scan running flags (keyed by entity_type string e.g. "bands", "albums")
+    pub duplicate_scans_running: Arc<RwLock<HashMap<String, bool>>>,
     pub static_config: StaticFileConfig,
     pub http_client: reqwest::Client,
+}
+
+impl AppState {
+    /// Check if any duplicate scan is currently running
+    pub async fn is_any_scan_running(&self) -> bool {
+        let map = self.duplicate_scans_running.read().await;
+        map.values().any(|&v| v)
+    }
+
+    /// Set the running flag for a specific entity type
+    pub async fn set_scan_running(&self, entity_type: &str, running: bool) {
+        let mut map = self.duplicate_scans_running.write().await;
+        map.insert(entity_type.to_string(), running);
+    }
+
+    /// Check if a specific entity type scan is running
+    pub async fn is_scan_running(&self, entity_type: &str) -> bool {
+        let map = self.duplicate_scans_running.read().await;
+        map.get(entity_type).copied().unwrap_or(false)
+    }
 }

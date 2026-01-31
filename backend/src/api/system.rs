@@ -116,39 +116,44 @@ pub(crate) async fn get_album_genre_update_progress(State(state): State<AppState
 struct JobStreamPayload {
     backfill: BackfillJobState,
     genre_update: TaskJobState,
-    duplicate_scan: Option<ScanStateResponse>,
+    /// Multiple scan states (one per running entity type)
+    duplicate_scans: Vec<ScanStateResponse>,
 }
 
 pub(crate) async fn job_stream(
     State(state): State<AppState>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    // Do one initial DB fetch for scan state regardless of flag
-    let initial_scan = DuplicateScanService::get_scan_state(&state.db).await.ok();
+    // Do one initial DB fetch for all scan states
+    let initial_scans = DuplicateScanService::get_all_running_scan_states(&state.db)
+        .await
+        .unwrap_or_default();
     let is_first = std::sync::Arc::new(tokio::sync::Mutex::new(true));
 
     let stream = IntervalStream::new(tokio::time::interval(Duration::from_secs(2)))
         .then(move |_| {
             let state = state.clone();
-            let initial_scan = initial_scan.clone();
+            let initial_scans = initial_scans.clone();
             let is_first = is_first.clone();
             async move {
                 let backfill = state.backfill_job_state.read().await.clone();
                 let genre_update = state.album_genre_update_job_state.read().await.clone();
 
                 let mut first = is_first.lock().await;
-                let duplicate_scan = if *first {
+                let duplicate_scans = if *first {
                     *first = false;
-                    initial_scan
+                    initial_scans
                 } else {
-                    let is_scan_running = *state.duplicate_scan_running.read().await;
-                    if is_scan_running {
-                        DuplicateScanService::get_scan_state(&state.db).await.ok()
+                    let any_running = state.is_any_scan_running().await;
+                    if any_running {
+                        DuplicateScanService::get_all_running_scan_states(&state.db)
+                            .await
+                            .unwrap_or_default()
                     } else {
-                        None
+                        vec![]
                     }
                 };
 
-                let payload = JobStreamPayload { backfill, genre_update, duplicate_scan };
+                let payload = JobStreamPayload { backfill, genre_update, duplicate_scans };
                 let json = serde_json::to_string(&payload).unwrap_or_default();
                 Ok::<_, Infallible>(Event::default().data(json))
             }

@@ -13,6 +13,7 @@ mod m20260201_create_radio_station_duplicate_candidates;
 mod m20260201_create_staff_member_duplicate_candidates;
 mod m20260201_create_label_duplicate_candidates;
 mod m20260131_fix_null_junction_ids;
+mod m20260201_add_entity_type_to_scan_state;
 
 pub struct Migrator;
 
@@ -33,6 +34,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260201_create_staff_member_duplicate_candidates::Migration),
             Box::new(m20260201_create_label_duplicate_candidates::Migration),
             Box::new(m20260131_fix_null_junction_ids::Migration),
+            Box::new(m20260201_add_entity_type_to_scan_state::Migration),
         ]
     }
 }
