@@ -62,11 +62,14 @@ pub(crate) async fn start_scan(
     match DuplicateScanService::start_scan(&state.db, request).await {
         Ok(scan_state) => {
             tracing::info!("Duplicate scan job requested to start");
+            *state.duplicate_scan_running.write().await = true;
             let db = state.db.clone();
+            let flag = state.duplicate_scan_running.clone();
             tokio::spawn(async move {
                 if let Err(e) = DuplicateScanService::run_scan_background(db).await {
                     tracing::error!("Duplicate scan background job failed: {}", e);
                 }
+                *flag.write().await = false;
             });
             (StatusCode::ACCEPTED, Json(scan_state)).into_response()
         }
@@ -87,7 +90,10 @@ pub(crate) async fn start_scan(
 )]
 pub(crate) async fn stop_scan(State(state): State<AppState>) -> impl IntoResponse {
     match DuplicateScanService::stop_scan(&state.db).await {
-        Ok(scan_state) => (StatusCode::OK, Json(scan_state)).into_response(),
+        Ok(scan_state) => {
+            *state.duplicate_scan_running.write().await = false;
+            (StatusCode::OK, Json(scan_state)).into_response()
+        }
         Err(e) => handle_internal_error(e),
     }
 }

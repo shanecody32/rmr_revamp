@@ -3,8 +3,6 @@ use dotenvy::dotenv;
 use std::env;
 use std::net::SocketAddr;
 use tower_http::cors::{Any, CorsLayer};
-use tower_http::trace::{DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse, TraceLayer};
-use tracing::Level;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -14,7 +12,7 @@ async fn main() {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "backend=info,tower_http=info".into()),
+                .unwrap_or_else(|_| "backend=info".into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
@@ -32,6 +30,7 @@ async fn main() {
         db,
         backfill_job_state: std::sync::Arc::new(tokio::sync::RwLock::new(BackfillJobState::default())),
         album_genre_update_job_state: std::sync::Arc::new(tokio::sync::RwLock::new(TaskJobState::default())),
+        duplicate_scan_running: std::sync::Arc::new(tokio::sync::RwLock::new(false)),
         static_config,
         http_client,
     };
@@ -41,15 +40,8 @@ async fn main() {
         .allow_methods(Any)
         .allow_headers(Any);
 
-    // Configure request/response tracing at DEBUG level
-    let trace_layer = TraceLayer::new_for_http()
-        .make_span_with(DefaultMakeSpan::new().level(Level::DEBUG))
-        .on_request(DefaultOnRequest::new().level(Level::DEBUG))
-        .on_response(DefaultOnResponse::new().level(Level::DEBUG));
-
     let app = api::create_router(state)
-        .layer(cors)
-        .layer(trace_layer);
+        .layer(cors);
 
     let host = env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
     let port = env::var("PORT").unwrap_or_else(|_| "3000".to_string());

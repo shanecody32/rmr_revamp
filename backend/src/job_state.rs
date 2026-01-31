@@ -44,6 +44,7 @@ pub struct AppState {
     pub db: DatabaseConnection,
     pub backfill_job_state: Arc<RwLock<BackfillJobState>>,
     pub album_genre_update_job_state: Arc<RwLock<TaskJobState>>,
+    pub duplicate_scan_running: Arc<RwLock<bool>>,
     pub static_config: StaticFileConfig,
     pub http_client: reqwest::Client,
 }

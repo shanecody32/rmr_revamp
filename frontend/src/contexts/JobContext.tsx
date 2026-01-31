@@ -108,10 +108,95 @@ export function JobProvider({ children }: { children: React.ReactNode }) {
     };
 
     useEffect(() => {
+        // Do one initial fetch, then switch to SSE
         fetchProgress();
-        // Poll every 5 seconds globally. System page might poll more frequently.
-        const interval = setInterval(fetchProgress, 5000);
-        return () => clearInterval(interval);
+
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        const eventSource = new EventSource(`${apiUrl}/system/jobs/stream`);
+
+        eventSource.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data) as {
+                    backfill: BackfillJobState;
+                    genre_update: TaskJobState;
+                    duplicate_scan: ScanStateResponse | null;
+                };
+
+                if (!isInitialMount.current) {
+                    // Check for backfill completion
+                    if (prevBackfillRunning.current && !data.backfill.is_running) {
+                        if (data.backfill.last_error) {
+                            toast({
+                                variant: 'destructive',
+                                title: 'Backfill Failed',
+                                description: data.backfill.last_error,
+                                duration: 10
+                            });
+                        } else {
+                            toast({
+                                title: 'Backfill Complete',
+                                description: 'Similarity data backfill has finished successfully.',
+                                duration: 10
+                            });
+                        }
+                    }
+
+                    // Check for genre update completion
+                    if (prevGenreRunning.current && !data.genre_update.is_running) {
+                        if (data.genre_update.last_error) {
+                            toast({
+                                variant: 'destructive',
+                                title: 'Genre Update Failed',
+                                description: data.genre_update.last_error,
+                                duration: 10
+                            });
+                        } else {
+                            toast({
+                                title: 'Genre Update Complete',
+                                description: 'Album genre charting update has finished successfully.',
+                                duration: 10
+                            });
+                        }
+                    }
+
+                    // Check for duplicate scan completion
+                    if (data.duplicate_scan && prevDupScanRunning.current && !data.duplicate_scan.is_running) {
+                        if (data.duplicate_scan.last_error) {
+                            toast({
+                                variant: 'destructive',
+                                title: 'Duplicate Scan Failed',
+                                description: data.duplicate_scan.last_error,
+                                duration: 10
+                            });
+                        } else {
+                            toast({
+                                title: 'Duplicate Scan Complete',
+                                description: `Scan finished. ${data.duplicate_scan.duplicates_found} duplicates found.`,
+                                duration: 10
+                            });
+                        }
+                    }
+                }
+
+                setBackfillProgress(data.backfill);
+                setGenreUpdateProgress(data.genre_update);
+                if (data.duplicate_scan) {
+                    setDuplicateScanProgress(data.duplicate_scan);
+                    prevDupScanRunning.current = data.duplicate_scan.is_running;
+                }
+                prevBackfillRunning.current = data.backfill.is_running;
+                prevGenreRunning.current = data.genre_update.is_running;
+                isInitialMount.current = false;
+            } catch (err) {
+                console.error('Failed to parse job stream event:', err);
+            }
+        };
+
+        eventSource.onerror = () => {
+            console.error('Job stream connection lost, reconnecting...');
+        };
+
+        return () => eventSource.close();
     }, []);
 
     return (

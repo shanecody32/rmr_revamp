@@ -30,6 +30,7 @@ import type {ColumnsType} from 'antd/es/table';
 import Link from 'next/link';
 import {useRouter} from 'next/navigation';
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {useJobs} from '@/contexts/JobContext';
 
 import {
     clearCandidates,
@@ -55,14 +56,14 @@ const {Title, Text} = Typography;
 export default function DuplicateCheckerContent() {
     const {message} = App.useApp();
     const router = useRouter();
+    const {duplicateScanProgress, isDuplicateScanRunning} = useJobs();
     const [scanState, setScanState] = useState<ScanStateResponse | null>(null);
     const [loading, setLoading] = useState(true);
-    const [scanning, setScanning] = useState(false);
     const [groupedResults, setGroupedResults] = useState<GroupedDuplicateResponse[]>([]);
     const [resultsLoading, setResultsLoading] = useState(false);
     const [pagination, setPagination] = useState({page: 1, pageSize: 20, total: 0});
     const [statusFilter, setStatusFilter] = useState<string>('pending');
-    const scanIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const prevScanRunning = useRef<boolean>(false);
 
     // Review modal state
     const [isSimilarBandsModalOpen, setIsSimilarBandsModalOpen] = useState(false);
@@ -91,32 +92,21 @@ export default function DuplicateCheckerContent() {
         loadResults();
     }, []);
 
-    // Auto-refresh scan state when scanning (server drives progress, we just poll state)
+    // Sync scan state from SSE context
     useEffect(() => {
-        if (scanning) {
-            scanIntervalRef.current = setInterval(async () => {
-                try {
-                    const newState = await getScanState();
-                    setScanState(newState);
-
-                    if (!newState.is_running) {
-                        setScanning(false);
-                        message.success('Scan completed');
-                        loadResults();
-                    }
-                } catch (error: any) {
-                    // Transient poll errors don't stop the scan (it continues server-side)
-                    console.error('Poll error:', error?.message || error);
-                }
-            }, 3000);
+        if (duplicateScanProgress) {
+            setScanState(duplicateScanProgress);
         }
+    }, [duplicateScanProgress]);
 
-        return () => {
-            if (scanIntervalRef.current) {
-                clearInterval(scanIntervalRef.current);
-            }
-        };
-    }, [scanning, message]);
+    // Detect scan completion via context
+    useEffect(() => {
+        if (prevScanRunning.current && !isDuplicateScanRunning) {
+            message.success('Scan completed');
+            loadResults();
+        }
+        prevScanRunning.current = isDuplicateScanRunning;
+    }, [isDuplicateScanRunning]);
 
     const loadScanState = async () => {
         try {
@@ -134,10 +124,6 @@ export default function DuplicateCheckerContent() {
                 batch_size: state.batch_size,
                 delay_between_batches_ms: state.delay_between_batches_ms,
             }));
-
-            if (state.is_running) {
-                setScanning(true);
-            }
         } catch (error) {
             console.error('Failed to load scan state:', error);
             message.error('Failed to load scan state');
@@ -174,7 +160,6 @@ export default function DuplicateCheckerContent() {
     const handleStartScan = async () => {
         try {
             await startScan(settings);
-            setScanning(true);
             message.success('Scan started');
         } catch (error: any) {
             message.error(error.response?.data || 'Failed to start scan');
@@ -184,9 +169,6 @@ export default function DuplicateCheckerContent() {
     const handleStopScan = async () => {
         try {
             await stopScan();
-            setScanning(false);
-            const state = await getScanState();
-            setScanState(state);
             message.success('Scan stopped');
             loadResults();
         } catch (error) {
@@ -539,7 +521,7 @@ export default function DuplicateCheckerContent() {
                         )}
 
                         <Space className="mt-4">
-                            {!scanning ? (
+                            {!isDuplicateScanRunning ? (
                                 <Button
                                     type="primary"
                                     icon={<CaretRightOutlined />}
@@ -559,14 +541,14 @@ export default function DuplicateCheckerContent() {
                             <Button
                                 icon={<ReloadOutlined />}
                                 onClick={loadScanState}
-                                disabled={scanning}
+                                disabled={isDuplicateScanRunning}
                             >
                                 Refresh
                             </Button>
                             <Button
                                 icon={<DeleteOutlined />}
                                 onClick={() => handleClearCandidates(true)}
-                                disabled={scanning}
+                                disabled={isDuplicateScanRunning}
                             >
                                 Clear Pending
                             </Button>
