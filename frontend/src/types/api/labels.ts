@@ -1,6 +1,28 @@
-import type {BaseEntity} from './common';
+// =============================================================================
+// Label Response Types
+// =============================================================================
 
-export interface LabelResponse extends BaseEntity {
+export interface LabelResponse {
+    id: number;
+    name: string;
+    slug: string;
+    album_count: number;
+    created_at: string | null;
+    updated_at: string | null;
+}
+
+export type LabelListItem = LabelResponse;
+
+// =============================================================================
+// Request Types
+// =============================================================================
+
+export interface CreateLabelRequest {
+    name: string;
+}
+
+export interface UpdateLabelRequest {
+    name?: string;
 }
 
 // =============================================================================

@@ -648,7 +648,7 @@ impl SongService {
                         .all(txn)
                         .await?;
 
-                    let existing_alias_keys: HashSet<(u32, Option<u32>, String)> = target_aliases
+                    let mut existing_alias_keys: HashSet<(u32, Option<u32>, String)> = target_aliases
                         .into_iter()
                         .map(|a| (a.band_id, a.radio_station_id, a.alias_key))
                         .collect();
@@ -669,6 +669,7 @@ impl SongService {
                                 let mut active: crate::models::song_aliases::ActiveModel = alias.into();
                                 active.song_id = Set(target_id);
                                 active.update(txn).await?;
+                                existing_alias_keys.insert(key);
                                 stats.aliases_moved += 1;
                             }
                         }

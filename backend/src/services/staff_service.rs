@@ -821,7 +821,7 @@ impl StaffService {
                     }
 
                     // 6. Move aliases (dedupe by name)
-                    let existing_aliases: HashSet<String> = StaffMemberAlias::find()
+                    let mut existing_aliases: HashSet<String> = StaffMemberAlias::find()
                         .filter(StaffMemberAliasColumn::StaffMemberId.eq(target_id))
                         .all(txn)
                         .await?
@@ -836,7 +836,8 @@ impl StaffService {
                             .await?;
 
                         for alias in aliases {
-                            if existing_aliases.contains(&alias.name.to_lowercase()) {
+                            let alias_name_lower = alias.name.to_lowercase();
+                            if existing_aliases.contains(&alias_name_lower) {
                                 let active: crate::models::staff_member_aliases::ActiveModel =
                                     alias.into();
                                 active.delete(txn).await?;
@@ -847,6 +848,7 @@ impl StaffService {
                                 alias.into();
                             active.staff_member_id = Set(target_id);
                             active.update(txn).await?;
+                            existing_aliases.insert(alias_name_lower);
                             stats.aliases_moved += 1;
                         }
                     }

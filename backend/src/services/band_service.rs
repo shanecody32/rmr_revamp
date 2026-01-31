@@ -553,10 +553,18 @@ impl BandService {
     ) -> Result<Option<BandDetailView>, DbErr> {
         let band = Band::find_by_id(id).one(db).await?;
         if let Some(band) = band {
-            let mut view = Self::load_band_detail_view(db, band).await?;
+            let mut view = Self::load_band_detail_view(db, band).await
+                .map_err(|e| {
+                    tracing::error!("load_band_detail_view failed for band {}: {}", id, e);
+                    e
+                })?;
 
             if include_albums {
-                let albums = Self::get_band_discography(db, id).await?;
+                let albums = Self::get_band_discography(db, id).await
+                    .map_err(|e| {
+                        tracing::error!("get_band_discography failed for band {}: {}", id, e);
+                        e
+                    })?;
                 view = view.with_albums(albums);
             }
 
@@ -577,36 +585,42 @@ impl BandService {
         let bands_sub_genres = crate::models::bands_sub_genres::Entity::find()
             .filter(BandsSubGenresColumn::BandId.eq(band_id))
             .all(db)
-            .await?;
+            .await
+            .map_err(|e| { tracing::error!("Failed loading bands_sub_genres for band {}: {}", band_id, e); e })?;
 
         let sub_genre_ids: Vec<u32> = bands_sub_genres.iter().filter_map(|bsg| bsg.sub_genre_id).collect();
         let sub_genres = crate::models::sub_genres::Entity::find()
             .filter(crate::models::sub_genres::Column::Id.is_in(sub_genre_ids))
             .all(db)
-            .await?;
+            .await
+            .map_err(|e| { tracing::error!("Failed loading sub_genres for band {}: {}", band_id, e); e })?;
 
         // Load genres from sub-genres
         let genre_ids: Vec<u32> = sub_genres.iter().filter_map(|sg| sg.genre_id).collect();
         let genres = crate::models::genres::Entity::find()
             .filter(crate::models::genres::Column::Id.is_in(genre_ids))
             .all(db)
-            .await?;
+            .await
+            .map_err(|e| { tracing::error!("Failed loading genres for band {}: {}", band_id, e); e })?;
 
         // Load location data
         let country = if let Some(id) = band.country_id {
-            crate::models::countries::Entity::find_by_id(id).one(db).await?
+            crate::models::countries::Entity::find_by_id(id).one(db).await
+                .map_err(|e| { tracing::error!("Failed loading country {} for band {}: {}", id, band_id, e); e })?
         } else {
             None
         };
 
         let state = if let Some(id) = band.state_id {
-            crate::models::states::Entity::find_by_id(id).one(db).await?
+            crate::models::states::Entity::find_by_id(id).one(db).await
+                .map_err(|e| { tracing::error!("Failed loading state {} for band {}: {}", id, band_id, e); e })?
         } else {
             None
         };
 
         let city = if let Some(id) = band.city_id {
-            crate::models::cities::Entity::find_by_id(id).one(db).await?
+            crate::models::cities::Entity::find_by_id(id).one(db).await
+                .map_err(|e| { tracing::error!("Failed loading city {} for band {}: {}", id, band_id, e); e })?
         } else {
             None
         };
@@ -615,7 +629,8 @@ impl BandService {
         let images = BandImage::find()
             .filter(BandImageColumn::BandId.eq(band_id))
             .all(db)
-            .await?;
+            .await
+            .map_err(|e| { tracing::error!("Failed loading images for band {}: {}", band_id, e); e })?;
 
         Ok(BandDetailView::new(
             band,
@@ -1269,7 +1284,7 @@ impl BandService {
                 }
 
                 // 5. Move band aliases (dedupe by alias_key)
-                let existing_aliases: HashSet<String> = BandAlias::find()
+                let mut existing_aliases: HashSet<String> = BandAlias::find()
                     .filter(BandAliasColumn::BandId.eq(target_id))
                     .all(txn)
                     .await?
@@ -1289,9 +1304,11 @@ impl BandService {
                             active.delete(txn).await?;
                             continue;
                         }
+                        let alias_key = alias.alias_key.clone();
                         let mut active: crate::models::band_aliases::ActiveModel = alias.into();
                         active.band_id = Set(target_id);
                         active.update(txn).await?;
+                        existing_aliases.insert(alias_key);
                         stats.aliases_moved += 1;
                     }
                 }
@@ -1637,7 +1654,7 @@ impl BandService {
                         .all(txn)
                         .await?;
 
-                    let existing_song_alias_keys: HashSet<(Option<u32>, String)> = target_song_aliases
+                    let mut existing_song_alias_keys: HashSet<(Option<u32>, String)> = target_song_aliases
                         .into_iter()
                         .map(|a| (a.radio_station_id, a.alias_key))
                         .collect();
@@ -1658,6 +1675,7 @@ impl BandService {
                                 let mut active: crate::models::song_aliases::ActiveModel = alias.into();
                                 active.band_id = Set(target_id);
                                 active.update(txn).await?;
+                                existing_song_alias_keys.insert(key);
                                 stats.song_aliases_moved += 1;
                             }
                         }
@@ -1671,7 +1689,7 @@ impl BandService {
                         .all(txn)
                         .await?;
 
-                    let existing_album_alias_keys: HashSet<(Option<u32>, String)> = target_album_aliases
+                    let mut existing_album_alias_keys: HashSet<(Option<u32>, String)> = target_album_aliases
                         .into_iter()
                         .map(|a| (a.radio_station_id, a.alias_key))
                         .collect();
@@ -1692,6 +1710,7 @@ impl BandService {
                                 let mut active: crate::models::album_aliases::ActiveModel = alias.into();
                                 active.band_id = Set(target_id);
                                 active.update(txn).await?;
+                                existing_album_alias_keys.insert(key);
                                 stats.album_aliases_moved += 1;
                             }
                         }
@@ -1804,13 +1823,34 @@ impl BandService {
     }
 
     pub async fn get_band_discography(db: &DatabaseConnection, id: u32) -> Result<Vec<AlbumResponse>, DbErr> {
-        let band = Band::find_by_id(id).one(db).await?;
-        if let Some(band) = band {
-            let albums = band.find_related(crate::models::albums::Entity).all(db).await?;
-            AlbumService::load_album_relations(db, albums).await
-        } else {
-            Ok(vec![])
+        // Query through junction table explicitly to avoid find_related JOIN issues
+        // with nullable columns in albums_bands
+        let album_bands = crate::models::albums_bands::Entity::find()
+            .filter(crate::models::albums_bands::Column::BandId.eq(id))
+            .all(db)
+            .await
+            .map_err(|e| { tracing::error!("Failed loading albums_bands for band {}: {}", id, e); e })?;
+
+        let album_ids: Vec<u32> = album_bands.iter()
+            .filter_map(|ab| ab.album_id)
+            .collect();
+
+        tracing::debug!("Band {} has {} album associations, {} valid album_ids", id, album_bands.len(), album_ids.len());
+
+        if album_ids.is_empty() {
+            return Ok(vec![]);
         }
+
+        let albums = crate::models::albums::Entity::find()
+            .filter(crate::models::albums::Column::Id.is_in(album_ids))
+            .all(db)
+            .await
+            .map_err(|e| { tracing::error!("Failed loading albums for band {}: {}", id, e); e })?;
+
+        tracing::debug!("Loaded {} albums for band {}, calling load_album_relations", albums.len(), id);
+
+        AlbumService::load_album_relations(db, albums).await
+            .map_err(|e| { tracing::error!("load_album_relations failed for band {}: {}", id, e); e })
     }
 
     pub async fn get_band_images(db: &DatabaseConnection, band_id: u32) -> Result<Vec<crate::models::band_images::Model>, DbErr> {

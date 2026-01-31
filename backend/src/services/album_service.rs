@@ -233,12 +233,14 @@ impl AlbumService {
         }
 
         let album_ids: Vec<u32> = albums.iter().map(|a| a.id).collect();
+        tracing::debug!("load_album_relations for album_ids: {:?}", album_ids);
 
         // Load images and group by album_id - O(n) instead of O(albums × images)
         let images = crate::models::album_images::Entity::find()
             .filter(crate::models::album_images::Column::AlbumId.is_in(album_ids.clone()))
             .all(db)
-            .await?;
+            .await
+            .map_err(|e| { tracing::error!("Failed loading album_images for {:?}: {}", album_ids, e); e })?;
         let images_by_album: HashMap<u32, Vec<_>> = images.into_iter()
             .filter_map(|img| img.album_id.map(|id| (id, img)))
             .fold(HashMap::new(), |mut acc, (id, img)| {
@@ -250,7 +252,8 @@ impl AlbumService {
         let album_songs = crate::models::albums_songs::Entity::find()
             .filter(crate::models::albums_songs::Column::AlbumId.is_in(album_ids.clone()))
             .all(db)
-            .await?;
+            .await
+            .map_err(|e| { tracing::error!("Failed loading albums_songs for {:?}: {}", album_ids, e); e })?;
         let album_songs_by_album: HashMap<u32, Vec<_>> = album_songs.iter()
             .map(|asong| (asong.album_id, asong.clone()))
             .fold(HashMap::new(), |mut acc, (id, asong)| {
@@ -259,10 +262,16 @@ impl AlbumService {
             });
 
         let song_ids: Vec<u32> = album_songs.iter().map(|asong| asong.song_id).collect();
-        let songs = crate::models::songs::Entity::find()
-            .filter(crate::models::songs::Column::Id.is_in(song_ids))
-            .all(db)
-            .await?;
+        tracing::debug!("Loading {} songs for albums {:?}", song_ids.len(), album_ids);
+        let songs = if song_ids.is_empty() {
+            vec![]
+        } else {
+            crate::models::songs::Entity::find()
+                .filter(crate::models::songs::Column::Id.is_in(song_ids))
+                .all(db)
+                .await
+                .map_err(|e| { tracing::error!("Failed loading songs for albums {:?}: {}", album_ids, e); e })?
+        };
         // Build song lookup map - O(1) lookup instead of O(songs)
         let song_map: HashMap<u32, _> = songs.into_iter()
             .map(|s| (s.id, s))
@@ -272,7 +281,8 @@ impl AlbumService {
         let albums_bands = crate::models::albums_bands::Entity::find()
             .filter(crate::models::albums_bands::Column::AlbumId.is_in(album_ids.clone()))
             .all(db)
-            .await?;
+            .await
+            .map_err(|e| { tracing::error!("Failed loading albums_bands for {:?}: {}", album_ids, e); e })?;
         let albums_bands_by_album: HashMap<u32, Vec<_>> = albums_bands.iter()
             .filter_map(|ab| ab.album_id.map(|id| (id, ab.clone())))
             .fold(HashMap::new(), |mut acc, (id, ab)| {
@@ -281,20 +291,29 @@ impl AlbumService {
             });
 
         let band_ids: Vec<u32> = albums_bands.iter().filter_map(|ab| ab.band_id).collect();
-        let bands = crate::models::bands::Entity::find()
-            .filter(crate::models::bands::Column::Id.is_in(band_ids))
-            .all(db)
-            .await?;
+        tracing::debug!("Loading {} bands for albums {:?}", band_ids.len(), album_ids);
+        let bands = if band_ids.is_empty() {
+            vec![]
+        } else {
+            crate::models::bands::Entity::find()
+                .filter(crate::models::bands::Column::Id.is_in(band_ids))
+                .all(db)
+                .await
+                .map_err(|e| { tracing::error!("Failed loading bands for albums {:?}: {}", album_ids, e); e })?
+        };
         // Build band lookup map - O(1) lookup instead of O(bands)
         let band_map: HashMap<u32, _> = bands.into_iter()
             .map(|b| (b.id, b))
             .collect();
 
         // Load genres/sub-genres through albums_sub_genres and group by album_id
+        // Filter out rows with NULL id (legacy data issue in junction table)
         let albums_sub_genres = crate::models::albums_sub_genres::Entity::find()
             .filter(crate::models::albums_sub_genres::Column::AlbumId.is_in(album_ids.clone()))
+            .filter(crate::models::albums_sub_genres::Column::Id.is_not_null())
             .all(db)
-            .await?;
+            .await
+            .map_err(|e| { tracing::error!("Failed loading albums_sub_genres for {:?}: {}", album_ids, e); e })?;
         let albums_sub_genres_by_album: HashMap<u32, Vec<_>> = albums_sub_genres.iter()
             .filter_map(|asg| asg.album_id.map(|id| (id, asg.clone())))
             .fold(HashMap::new(), |mut acc, (id, asg)| {
@@ -321,10 +340,17 @@ impl AlbumService {
             }
         }
 
-        let sub_genres = crate::models::sub_genres::Entity::find()
-            .filter(crate::models::sub_genres::Column::Id.is_in(all_sub_genre_ids.into_iter().collect::<Vec<_>>()))
-            .all(db)
-            .await?;
+        let sub_genre_id_vec: Vec<_> = all_sub_genre_ids.into_iter().collect();
+        tracing::debug!("Loading {} sub_genres for albums {:?}", sub_genre_id_vec.len(), album_ids);
+        let sub_genres = if sub_genre_id_vec.is_empty() {
+            vec![]
+        } else {
+            crate::models::sub_genres::Entity::find()
+                .filter(crate::models::sub_genres::Column::Id.is_in(sub_genre_id_vec))
+                .all(db)
+                .await
+                .map_err(|e| { tracing::error!("Failed loading sub_genres for albums {:?}: {}", album_ids, e); e })?
+        };
         // Build sub_genre lookup map - O(1) lookup instead of O(sub_genres)
         let sub_genre_map: HashMap<u32, _> = sub_genres.into_iter()
             .map(|sg| (sg.id, sg))
@@ -333,10 +359,15 @@ impl AlbumService {
         let genre_ids: Vec<u32> = sub_genre_map.values()
             .filter_map(|sg| sg.genre_id)
             .collect();
-        let genres = crate::models::genres::Entity::find()
-            .filter(crate::models::genres::Column::Id.is_in(genre_ids))
-            .all(db)
-            .await?;
+        let genres = if genre_ids.is_empty() {
+            vec![]
+        } else {
+            crate::models::genres::Entity::find()
+                .filter(crate::models::genres::Column::Id.is_in(genre_ids))
+                .all(db)
+                .await
+                .map_err(|e| { tracing::error!("Failed loading genres for albums {:?}: {}", album_ids, e); e })?
+        };
         // Build genre lookup map - O(1) lookup instead of O(genres)
         let genre_map: HashMap<u32, _> = genres.into_iter()
             .map(|g| (g.id, g))
@@ -1025,7 +1056,7 @@ impl AlbumService {
                         .all(txn)
                         .await?;
 
-                    let existing_alias_keys: HashSet<(u32, Option<u32>, String)> = target_aliases
+                    let mut existing_alias_keys: HashSet<(u32, Option<u32>, String)> = target_aliases
                         .into_iter()
                         .map(|a| (a.band_id, a.radio_station_id, a.alias_key))
                         .collect();
@@ -1046,6 +1077,7 @@ impl AlbumService {
                                 let mut active: crate::models::album_aliases::ActiveModel = alias.into();
                                 active.album_id = Set(target_id);
                                 active.update(txn).await?;
+                                existing_alias_keys.insert(key);
                                 stats.aliases_moved += 1;
                             }
                         }
@@ -1195,7 +1227,7 @@ impl AlbumService {
                         })
                         .collect();
 
-                    AlbumSubGenre::insert_many(to_add).exec(txn).await?;
+                    AlbumSubGenre::insert_many(to_add).exec_without_returning(txn).await?;
                 }
 
                 if songs.is_empty() {
@@ -1497,7 +1529,7 @@ impl AlbumService {
             // Insert in sub-batches to avoid overly large INSERT statements
             for insert_batch in all_inserts.chunks(10000) {
                 AlbumSubGenre::insert_many(insert_batch.to_vec())
-                    .exec(db)
+                    .exec_without_returning(db)
                     .await?;
             }
         }

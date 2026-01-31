@@ -821,7 +821,7 @@ impl RadioStationService {
 
                 // 20. radio_station_aliases — dedupe by name
                 {
-                    let existing_names: HashSet<String> = RadioStationAlias::find()
+                    let mut existing_names: HashSet<String> = RadioStationAlias::find()
                         .filter(RadioStationAliasColumn::RadioStationId.eq(target_id))
                         .all(txn)
                         .await?
@@ -842,9 +842,11 @@ impl RadioStationService {
                                 stats.station_aliases_deduped += 1;
                                 continue;
                             }
+                            let alias_name = alias.name.clone();
                             let mut active: crate::models::radio_station_aliases::ActiveModel = alias.into();
                             active.radio_station_id = Set(target_id);
                             active.update(txn).await?;
+                            existing_names.insert(alias_name);
                             stats.station_aliases_moved += 1;
                         }
                     }

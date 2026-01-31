@@ -42,6 +42,7 @@ export default function AdminSidebar() {
         if (pathname?.startsWith('/staff/duplicates')) return '/staff/duplicates';
         if (pathname?.startsWith('/staff')) return '/staff';
         if (pathname?.startsWith('/labels/duplicates')) return '/labels/duplicates';
+        if (pathname?.startsWith('/labels')) return '/labels';
         return pathname || '/';
     };
 
@@ -51,6 +52,7 @@ export default function AdminSidebar() {
         if (pathname?.startsWith('/albums')) return ['albums-submenu'];
         if (pathname?.startsWith('/songs')) return ['songs-submenu'];
         if (pathname?.startsWith('/radio-stations') || pathname?.startsWith('/staff')) return ['stations-submenu'];
+        if (pathname?.startsWith('/labels')) return ['labels-submenu'];
         return [];
     };
 
@@ -139,9 +141,21 @@ export default function AdminSidebar() {
             ],
         },
         {
-            key: '/labels/duplicates',
+            key: 'labels-submenu',
             icon: <TagOutlined/>,
-            label: <Link href="/labels/duplicates">Label Duplicates</Link>,
+            label: 'Labels',
+            children: [
+                {
+                    key: '/labels',
+                    icon: <UnorderedListOutlined/>,
+                    label: <Link href="/labels">All Labels</Link>,
+                },
+                {
+                    key: '/labels/duplicates',
+                    icon: <CopyOutlined/>,
+                    label: <Link href="/labels/duplicates">Duplicate Checker</Link>,
+                },
+            ],
         },
         {
             key: '/charts',
