@@ -162,15 +162,22 @@ export function JobProvider({ children }: { children: React.ReactNode }) {
                 setGenreUpdateProgress(data.genre_update);
 
                 // Update per-entity scan progress
-                if (data.duplicate_scans.length > 0) {
-                    setDuplicateScanProgress(prev => {
-                        const next = { ...prev };
-                        for (const scan of data.duplicate_scans) {
-                            next[scan.entity_type] = scan;
+                // The SSE only sends currently-running scans, so mark any
+                // previously-tracked scans that are no longer present as stopped.
+                setDuplicateScanProgress(prev => {
+                    const next = { ...prev };
+                    const incomingTypes = new Set<string>();
+                    for (const scan of data.duplicate_scans) {
+                        next[scan.entity_type] = scan;
+                        incomingTypes.add(scan.entity_type);
+                    }
+                    for (const key of Object.keys(next)) {
+                        if (!incomingTypes.has(key) && next[key].is_running) {
+                            next[key] = { ...next[key], is_running: false };
                         }
-                        return next;
-                    });
-                }
+                    }
+                    return next;
+                });
 
                 // Track which entity scans are running
                 const newRunning: Record<string, boolean> = {};

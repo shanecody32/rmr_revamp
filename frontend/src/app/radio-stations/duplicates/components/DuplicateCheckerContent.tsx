@@ -50,7 +50,7 @@ import {fetchSimilarRadioStations, type SimilarRadioStation} from '@/lib/api/rad
 import SimilarEntitiesModal, {type SimilarEntity} from '@/components/common/modals/SimilarEntitiesModal';
 import RadioStationMergeComparison from '../../components/RadioStationMergeComparison';
 
-const {Title, Text} = Typography;
+const {Text} = Typography;
 
 interface ManualSearchSettings {
     min_similarity: number;
@@ -416,11 +416,6 @@ export default function DuplicateCheckerContent() {
 
     return (
         <div className="p-6">
-            <Title level={2}>Radio Station Duplicate Checker</Title>
-            <Text type="secondary" className="mb-6 block">
-                Scan the database for potential duplicate radio stations, or search manually
-            </Text>
-
             {/* Scan Status & Controls */}
             <Row gutter={[16, 16]} className="mb-6">
                 <Col xs={24} lg={16}>

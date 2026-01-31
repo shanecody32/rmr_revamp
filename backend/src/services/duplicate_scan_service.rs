@@ -219,21 +219,44 @@ impl From<SongCandidateModel> for GenericCandidate {
 impl DuplicateScanService {
     // ──────────────────────────── helpers ────────────────────────────
 
-    /// Find scan state row by entity type
+    /// Find scan state row by entity type, creating a default if none exists
     async fn find_state(
         db: &DatabaseConnection,
         entity_type: &ScanEntityType,
     ) -> Result<crate::models::duplicate_scan_state::Model, DbErr> {
-        DuplicateScanState::find()
+        if let Some(state) = DuplicateScanState::find()
             .filter(ScanStateColumn::EntityType.eq(entity_type.to_string()))
             .one(db)
             .await?
-            .ok_or_else(|| {
-                DbErr::RecordNotFound(format!(
-                    "Scan state not found for entity type: {}",
-                    entity_type
-                ))
-            })
+        {
+            return Ok(state);
+        }
+
+        // Auto-create a default scan state row for this entity type
+        let now = chrono::Utc::now().naive_utc();
+        let new_state = ScanStateActiveModel {
+            entity_type: Set(entity_type.to_string()),
+            last_processed_id: Set(0),
+            total_items_scanned: Set(0),
+            duplicates_found: Set(0),
+            is_running: Set(false),
+            started_at: Set(None),
+            stopped_at: Set(None),
+            stop_reason: Set(None),
+            last_error: Set(None),
+            min_similarity: Set(95),
+            jw_weight: Set(Decimal::new(60, 2)),
+            dice_weight: Set(Decimal::new(40, 2)),
+            max_duplicates_to_find: Set(0),
+            batch_size: Set(100),
+            delay_between_batches_ms: Set(50),
+            continuous_mode: Set(false),
+            continuous_delay_minutes: Set(30),
+            updated_at: Set(now),
+            ..Default::default()
+        };
+        let result = new_state.insert(db).await?;
+        Ok(result)
     }
 
     /// Get total entity count for progress calculation
@@ -470,7 +493,7 @@ impl DuplicateScanService {
         let jw_weight: f64 = state.jw_weight.to_string().parse().unwrap_or(0.6);
         let dice_weight: f64 = state.dice_weight.to_string().parse().unwrap_or(0.4);
 
-        if state.duplicates_found >= max_duplicates {
+        if max_duplicates > 0 && state.duplicates_found >= max_duplicates {
             Self::finalize_scan(db, entity_type, StopReason::LimitReached, None).await?;
             return Ok((0, 0, true));
         }

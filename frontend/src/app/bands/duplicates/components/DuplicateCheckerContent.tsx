@@ -51,7 +51,7 @@ import type {BandResponse} from '@/types/api/bands';
 import SimilarBandsModal, {type SearchSettings} from '../../components/SimilarBandsModal';
 import BandMergeComparison from '../../components/BandMergeComparison';
 
-const {Title, Text} = Typography;
+const {Text} = Typography;
 
 export default function DuplicateCheckerContent() {
     const {message} = App.useApp();
@@ -465,11 +465,6 @@ export default function DuplicateCheckerContent() {
 
     return (
         <div className="p-6">
-            <Title level={2}>Duplicate Checker</Title>
-            <Text type="secondary" className="mb-6 block">
-                Scan the database for potential duplicate bands
-            </Text>
-
             {/* Scan Status & Controls */}
             <Row gutter={[16, 16]} className="mb-6">
                 <Col xs={24} lg={16}>

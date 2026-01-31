@@ -31,18 +31,14 @@ export default function AdminSidebar() {
 
     // Determine which menu key should be selected based on pathname
     const getSelectedKey = () => {
-        if (pathname?.startsWith('/bands/duplicates')) return '/bands/duplicates';
         if (pathname?.startsWith('/bands')) return '/bands';
-        if (pathname?.startsWith('/albums/duplicates')) return '/albums/duplicates';
         if (pathname?.startsWith('/albums')) return '/albums';
-        if (pathname?.startsWith('/songs/duplicates')) return '/songs/duplicates';
         if (pathname?.startsWith('/songs')) return '/songs';
-        if (pathname?.startsWith('/radio-stations/duplicates')) return '/radio-stations/duplicates';
         if (pathname?.startsWith('/radio-stations')) return '/radio-stations';
-        if (pathname?.startsWith('/staff/duplicates')) return '/staff/duplicates';
         if (pathname?.startsWith('/staff')) return '/staff';
-        if (pathname?.startsWith('/labels/duplicates')) return '/labels/duplicates';
         if (pathname?.startsWith('/labels')) return '/labels';
+        if (pathname?.startsWith('/system/duplicates')) return '/system/duplicates';
+        if (pathname?.startsWith('/system')) return '/system';
         return pathname || '/';
     };
 
@@ -53,6 +49,7 @@ export default function AdminSidebar() {
         if (pathname?.startsWith('/songs')) return ['songs-submenu'];
         if (pathname?.startsWith('/radio-stations') || pathname?.startsWith('/staff')) return ['stations-submenu'];
         if (pathname?.startsWith('/labels')) return ['labels-submenu'];
+        if (pathname?.startsWith('/system')) return ['system-submenu'];
         return [];
     };
 
@@ -72,11 +69,6 @@ export default function AdminSidebar() {
                     icon: <UnorderedListOutlined/>,
                     label: <Link href="/bands">All Bands</Link>,
                 },
-                {
-                    key: '/bands/duplicates',
-                    icon: <CopyOutlined/>,
-                    label: <Link href="/bands/duplicates">Duplicate Checker</Link>,
-                },
             ],
         },
         {
@@ -89,11 +81,6 @@ export default function AdminSidebar() {
                     icon: <UnorderedListOutlined/>,
                     label: <Link href="/songs">All Songs</Link>,
                 },
-                {
-                    key: '/songs/duplicates',
-                    icon: <CopyOutlined/>,
-                    label: <Link href="/songs/duplicates">Duplicate Checker</Link>,
-                },
             ],
         },
         {
@@ -105,11 +92,6 @@ export default function AdminSidebar() {
                     key: '/albums',
                     icon: <UnorderedListOutlined/>,
                     label: <Link href="/albums">All Albums</Link>,
-                },
-                {
-                    key: '/albums/duplicates',
-                    icon: <CopyOutlined/>,
-                    label: <Link href="/albums/duplicates">Duplicate Checker</Link>,
                 },
             ],
         },
@@ -124,19 +106,9 @@ export default function AdminSidebar() {
                     label: <Link href="/radio-stations">All Stations</Link>,
                 },
                 {
-                    key: '/radio-stations/duplicates',
-                    icon: <CopyOutlined/>,
-                    label: <Link href="/radio-stations/duplicates">Duplicate Checker</Link>,
-                },
-                {
                     key: '/staff',
                     icon: <UserOutlined/>,
                     label: <Link href="/staff">Staff Members</Link>,
-                },
-                {
-                    key: '/staff/duplicates',
-                    icon: <CopyOutlined/>,
-                    label: <Link href="/staff/duplicates">Staff Duplicates</Link>,
                 },
             ],
         },
@@ -150,11 +122,6 @@ export default function AdminSidebar() {
                     icon: <UnorderedListOutlined/>,
                     label: <Link href="/labels">All Labels</Link>,
                 },
-                {
-                    key: '/labels/duplicates',
-                    icon: <CopyOutlined/>,
-                    label: <Link href="/labels/duplicates">Duplicate Checker</Link>,
-                },
             ],
         },
         {
@@ -163,9 +130,21 @@ export default function AdminSidebar() {
             label: <Link href="/charts">Charts</Link>,
         },
         {
-            key: '/system',
+            key: 'system-submenu',
             icon: <SettingOutlined/>,
-            label: <Link href="/system">System</Link>,
+            label: 'System',
+            children: [
+                {
+                    key: '/system',
+                    icon: <SettingOutlined/>,
+                    label: <Link href="/system">Settings</Link>,
+                },
+                {
+                    key: '/system/duplicates',
+                    icon: <CopyOutlined/>,
+                    label: <Link href="/system/duplicates">Duplicate Checker</Link>,
+                },
+            ],
         },
         {
             key: 'rapidoc',
