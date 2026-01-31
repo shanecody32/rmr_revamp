@@ -1,4 +1,4 @@
-import type {AlbumResponse} from '@/types/api/albums';
+import type {AlbumResponse, MergeAlbumsRequest, AlbumMergeResult} from '@/types/api/albums';
 import {ApiParams, ApiResponse, nameFilterTypeMap, PaginationResponse} from '@/types/api/common';
 
 import {api} from './config';
@@ -37,3 +37,30 @@ export async function updateAlbum(id: number, data: Partial<AlbumResponse>): Pro
     const response = await api.put<AlbumResponse>(`/albums/${id}`, data);
     return response.data;
 }
+
+export const mergeAlbums = async (data: MergeAlbumsRequest): Promise<AlbumMergeResult> => {
+    const response = await api.post<AlbumMergeResult>('/albums/merge', data, {
+        timeout: 5 * 60 * 1000,
+    });
+    return response.data;
+};
+
+export interface SimilarAlbum {
+    id: number;
+    name: string;
+    similarity_score: number;
+}
+
+export const fetchSimilarAlbums = async (params: {
+    search_term: string;
+    existing_id?: number;
+    jw_weight?: number;
+    dice_weight?: number;
+    min_similarity?: number;
+    limit?: number;
+    band_id?: number;
+    restrict_to_parent?: boolean;
+}): Promise<SimilarAlbum[]> => {
+    const response = await api.get<SimilarAlbum[]>('/albums/similar', {params});
+    return response.data;
+};

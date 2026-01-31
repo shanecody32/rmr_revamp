@@ -1,6 +1,6 @@
 import {ApiParams, ApiResponse, PaginationResponse} from '@/types/api/common';
 import {nameFilterTypeMap} from '@/types/api/common';
-import type {SongResponse} from '@/types/api/songs';
+import type {SongResponse, MergeSongsRequest, SongMergeResult} from '@/types/api/songs';
 
 import {api} from './config';
 
@@ -52,5 +52,32 @@ export const fetchSongs = async (params: ApiParams): Promise<{
 
 export const createSong = async (data: Partial<SongResponse>): Promise<SongResponse> => {
     const response = await api.post<SongResponse>('/songs', data);
+    return response.data;
+};
+
+export const mergeSongs = async (data: MergeSongsRequest): Promise<SongMergeResult> => {
+    const response = await api.post<SongMergeResult>('/songs/merge', data, {
+        timeout: 5 * 60 * 1000,
+    });
+    return response.data;
+};
+
+export interface SimilarSong {
+    id: number;
+    name: string;
+    similarity_score: number;
+}
+
+export const fetchSimilarSongs = async (params: {
+    search_term: string;
+    existing_id?: number;
+    jw_weight?: number;
+    dice_weight?: number;
+    min_similarity?: number;
+    limit?: number;
+    band_id?: number;
+    restrict_to_parent?: boolean;
+}): Promise<SimilarSong[]> => {
+    const response = await api.get<SimilarSong[]>('/songs/similar', {params});
     return response.data;
 };

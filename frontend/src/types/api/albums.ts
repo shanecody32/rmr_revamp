@@ -44,3 +44,45 @@ export interface AlbumWithRelationsResponse extends AlbumResponse {
     genres: GenreResponse[];
     songs: SongWithTrackInfoResponse[];
 }
+
+// =============================================================================
+// Merge Types
+// =============================================================================
+
+export interface MergeAlbumsRequest {
+    from_ids: number[];
+    into_id: number;
+    merged_data: Record<string, unknown>;
+}
+
+export interface AlbumMergeStats {
+    images_moved: number;
+    images_deduped: number;
+    band_associations_moved: number;
+    band_associations_deduped: number;
+    song_associations_moved: number;
+    song_associations_deduped: number;
+    sub_genres_added: number;
+    radio_playlists_moved: number;
+    radio_playlists_aggregated: number;
+    radio_playlist_archives_moved: number;
+    radio_playlist_archives_aggregated: number;
+    staff_playlists_moved: number;
+    staff_playlists_aggregated: number;
+    staff_playlist_archives_moved: number;
+    staff_playlist_archives_aggregated: number;
+    raw_data_updated: number;
+    rankings_moved: number;
+    total_stats_moved: number;
+    weekly_stats_moved: number;
+    aliases_moved: number;
+    aliases_deduped: number;
+    duplicate_candidates_updated: number;
+    duplicate_candidates_cleaned: number;
+    albums_deleted: number;
+}
+
+export interface AlbumMergeResult {
+    merged_album: AlbumResponse;
+    stats: AlbumMergeStats;
+}

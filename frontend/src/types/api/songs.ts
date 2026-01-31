@@ -32,3 +32,42 @@ export interface SongWithTrackInfoResponse {
     modified?: string;
     song: SongResponse;
 }
+
+// =============================================================================
+// Merge Types
+// =============================================================================
+
+export interface MergeSongsRequest {
+    from_ids: number[];
+    into_id: number;
+    merged_data: Record<string, unknown>;
+}
+
+export interface SongMergeStats {
+    performers_moved: number;
+    performers_deduped: number;
+    album_associations_moved: number;
+    album_associations_deduped: number;
+    radio_playlists_moved: number;
+    radio_playlists_aggregated: number;
+    radio_playlist_archives_moved: number;
+    radio_playlist_archives_aggregated: number;
+    staff_playlists_moved: number;
+    staff_playlists_aggregated: number;
+    staff_playlist_archives_moved: number;
+    staff_playlist_archives_aggregated: number;
+    raw_data_updated: number;
+    rankings_moved: number;
+    total_stats_moved: number;
+    weekly_stats_moved: number;
+    aliases_moved: number;
+    aliases_deduped: number;
+    duplicate_candidates_updated: number;
+    duplicate_candidates_cleaned: number;
+    songs_deleted: number;
+}
+
+export interface SongMergeResult {
+    merged_song: SongResponse;
+    stats: SongMergeStats;
+}

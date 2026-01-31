@@ -10,6 +10,7 @@ import {
   PictureOutlined,
   SettingOutlined,
   SoundOutlined,
+  TagOutlined,
   TeamOutlined,
   UnorderedListOutlined,
   UserOutlined,
@@ -32,14 +33,26 @@ export default function AdminSidebar() {
     const getSelectedKey = () => {
         if (pathname?.startsWith('/bands/duplicates')) return '/bands/duplicates';
         if (pathname?.startsWith('/bands')) return '/bands';
+        if (pathname?.startsWith('/albums/duplicates')) return '/albums/duplicates';
+        if (pathname?.startsWith('/albums')) return '/albums';
+        if (pathname?.startsWith('/songs/duplicates')) return '/songs/duplicates';
+        if (pathname?.startsWith('/songs')) return '/songs';
+        if (pathname?.startsWith('/radio-stations/duplicates')) return '/radio-stations/duplicates';
+        if (pathname?.startsWith('/radio-stations')) return '/radio-stations';
+        if (pathname?.startsWith('/staff/duplicates')) return '/staff/duplicates';
         if (pathname?.startsWith('/staff')) return '/staff';
+        if (pathname?.startsWith('/labels/duplicates')) return '/labels/duplicates';
+        if (pathname?.startsWith('/labels')) return '/labels';
         return pathname || '/';
     };
 
     // Determine which submenu should be open
     const getOpenKeys = () => {
         if (pathname?.startsWith('/bands')) return ['bands-submenu'];
+        if (pathname?.startsWith('/albums')) return ['albums-submenu'];
+        if (pathname?.startsWith('/songs')) return ['songs-submenu'];
         if (pathname?.startsWith('/radio-stations') || pathname?.startsWith('/staff')) return ['stations-submenu'];
+        if (pathname?.startsWith('/labels')) return ['labels-submenu'];
         return [];
     };
 
@@ -67,14 +80,38 @@ export default function AdminSidebar() {
             ],
         },
         {
-            key: '/songs',
+            key: 'songs-submenu',
             icon: <SoundOutlined/>,
-            label: <Link href="/songs">Songs</Link>,
+            label: 'Songs',
+            children: [
+                {
+                    key: '/songs',
+                    icon: <UnorderedListOutlined/>,
+                    label: <Link href="/songs">All Songs</Link>,
+                },
+                {
+                    key: '/songs/duplicates',
+                    icon: <CopyOutlined/>,
+                    label: <Link href="/songs/duplicates">Duplicate Checker</Link>,
+                },
+            ],
         },
         {
-            key: '/albums',
+            key: 'albums-submenu',
             icon: <PictureOutlined/>,
-            label: <Link href="/albums">Albums</Link>,
+            label: 'Albums',
+            children: [
+                {
+                    key: '/albums',
+                    icon: <UnorderedListOutlined/>,
+                    label: <Link href="/albums">All Albums</Link>,
+                },
+                {
+                    key: '/albums/duplicates',
+                    icon: <CopyOutlined/>,
+                    label: <Link href="/albums/duplicates">Duplicate Checker</Link>,
+                },
+            ],
         },
         {
             key: 'stations-submenu',
@@ -87,9 +124,36 @@ export default function AdminSidebar() {
                     label: <Link href="/radio-stations">All Stations</Link>,
                 },
                 {
+                    key: '/radio-stations/duplicates',
+                    icon: <CopyOutlined/>,
+                    label: <Link href="/radio-stations/duplicates">Duplicate Checker</Link>,
+                },
+                {
                     key: '/staff',
                     icon: <UserOutlined/>,
                     label: <Link href="/staff">Staff Members</Link>,
+                },
+                {
+                    key: '/staff/duplicates',
+                    icon: <CopyOutlined/>,
+                    label: <Link href="/staff/duplicates">Staff Duplicates</Link>,
+                },
+            ],
+        },
+        {
+            key: 'labels-submenu',
+            icon: <TagOutlined/>,
+            label: 'Labels',
+            children: [
+                {
+                    key: '/labels',
+                    icon: <UnorderedListOutlined/>,
+                    label: <Link href="/labels">All Labels</Link>,
+                },
+                {
+                    key: '/labels/duplicates',
+                    icon: <CopyOutlined/>,
+                    label: <Link href="/labels/duplicates">Duplicate Checker</Link>,
                 },
             ],
         },
