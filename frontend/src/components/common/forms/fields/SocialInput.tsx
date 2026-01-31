@@ -30,7 +30,7 @@ export const SocialInput: React.FC<SocialInputProps> = ({value = {}, onChange}) 
     };
 
     return (
-        <Space direction="vertical" className="w-full">
+        <Space orientation="vertical" className="w-full">
             <Input
                 prefix={<FacebookOutlined className="text-[#1877F2]"/>}
                 placeholder="Facebook URL"

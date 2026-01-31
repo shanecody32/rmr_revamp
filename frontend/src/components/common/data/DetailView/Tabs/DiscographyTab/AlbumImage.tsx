@@ -12,13 +12,16 @@ const FALLBACK_IMAGE = getFallbackImageUrl();
 
 export default function AlbumImage({src, alt}: AlbumImageProps) {
     return (
-        <div className="w-24 h-24 flex-shrink-0">
+        <div className="flex-shrink-0" style={{width: 96, height: 96}}>
             <ResponsiveImage
                 src={src}
                 alt={alt}
                 fallback={FALLBACK_IMAGE}
-                className="w-full h-full rounded"
+                className="rounded"
                 objectFit="cover"
+                width={96}
+                height={96}
+                aspectRatio="1/1"
             />
         </div>
     );

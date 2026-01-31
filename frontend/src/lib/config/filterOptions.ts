@@ -44,6 +44,34 @@ export const radioStationFilterOptions = [
     }
 ] as const;
 
+export const staffFilterOptions = [
+    {
+        key: 'verified_approved',
+        label: 'Verified & Approved',
+        description: 'Fully validated staff members'
+    },
+    {
+        key: 'verified_pending',
+        label: 'Verified Only',
+        description: 'Identity verified, awaiting approval'
+    },
+    {
+        key: 'approved_only',
+        label: 'Approved Only',
+        description: 'Content approved, verification needed'
+    },
+    {
+        key: 'pending_all',
+        label: 'Pending All',
+        description: 'Awaiting verification & approval'
+    },
+    {
+        key: 'has_playlist',
+        label: 'Has Playlist',
+        description: 'Staff members with playlist submissions'
+    }
+] as const;
+
 export type FilterOption = {
     key: string;
     label: string;

@@ -19,24 +19,22 @@ import {
 import {App, Button, Card, Col, Descriptions, Row, Space, Tabs, Tag, Typography} from 'antd';
 import Image from 'next/image';
 import Link from 'next/link';
-import {use, useEffect, useState} from 'react';
+import {use, useEffect, useMemo, useState} from 'react';
 
 import DiscographyTab from '@/components/common/data/DetailView/Tabs/DiscographyTab';
 import LocationDisplay from '@/components/common/data/LocationDisplay';
 import LoadingSpinner from '@/components/common/feedback/LoadingSpinner';
 import WebsiteLink from '@/components/common/navigation/WebsiteLink';
 import {useLocation} from '@/contexts/LocationContext';
-import {fetchBandById} from '@/lib/api/bands';
+import {useNavigationContext} from '@/hooks/useNavigationContext';
+import DOMPurify from 'dompurify';
+import {fetchBandDetail} from '@/lib/api/bands';
+import {buildImageUrl} from '@/lib/utils/media';
 import {StatusTag} from '@/lib/utils/status';
-import type {BandWithDiscographyResponse} from '@/types/api/bands';
+import type {BandDetailView} from '@/types/api/bands';
 
 const {Title, Text} = Typography;
 
-const PLACEHOLDER_IMAGES = [
-    'https://images.unsplash.com/photo-1501612780327-45045538702b?w=800&q=80',
-    'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=800&q=80',
-    'https://images.unsplash.com/photo-1528489496900-d841974f5290?w=800&q=80',
-];
 
 function EmptyFieldTag() {
     return (
@@ -94,17 +92,23 @@ interface BandViewContentProps {
 
 export default function BandViewContent({params}: BandViewContentProps) {
     const resolvedParams = use(params);
-    const [band, setBand] = useState<BandWithDiscographyResponse | null>(null);
+    const [band, setBand] = useState<BandDetailView | null>(null);
     const [loading, setLoading] = useState(true);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const {message} = App.useApp();
     const {addCityToCache} = useLocation();
+    const nav = useNavigationContext('bands');
+
+    const sortedImages = useMemo(() => {
+        if (!band?.images?.length) return [];
+        return [...band.images].sort((a, b) => (a.order || 0) - (b.order || 0));
+    }, [band?.images]);
 
     useEffect(() => {
         const loadBand = async () => {
             try {
                 setLoading(true);
-                const data = await fetchBandById(parseInt(resolvedParams.id));
+                const data = await fetchBandDetail(parseInt(resolvedParams.id), { includeAlbums: true });
                 setBand(data);
 
                 // Add city to location context cache if available
@@ -160,17 +164,17 @@ export default function BandViewContent({params}: BandViewContentProps) {
                     <div className="mb-8">
                         <Title level={4} className="mb-4">Band Photos</Title>
                         <Row gutter={[16, 16]}>
-                            {band.images && band.images.length > 0 ? (
-                                band.images.sort((a, b) => (a.order || 0) - (b.order || 0)).map((image) => {
-                                    const imageUrl = image.path && image.filename 
-                                        ? `/${image.path}/${image.filename}`
+                            {sortedImages.length > 0 ? (
+                                sortedImages.map((image) => {
+                                    const imageUrl = image.filename
+                                        ? buildImageUrl(image.path, image.filename)
                                         : null;
-                                    const thumbUrl = image.path && image.thumbname
-                                        ? `/${image.path}/${image.thumbname}`
+                                    const thumbUrl = image.thumbname
+                                        ? buildImageUrl(image.path, image.thumbname)
                                         : null;
-                                    
+
                                     if (!imageUrl) return null;
-                                    
+
                                     return (
                                         <Col key={image.id} xs={24} sm={12} md={8}>
                                             <div className="relative group overflow-hidden rounded-lg">
@@ -207,33 +211,9 @@ export default function BandViewContent({params}: BandViewContentProps) {
                                     );
                                 })
                             ) : (
-                                PLACEHOLDER_IMAGES.map((img, i) => (
-                                    <Col key={i} xs={24} sm={12} md={8}>
-                                        <div className="relative group overflow-hidden rounded-lg">
-                                            <Image
-                                                src={img}
-                                                alt={`${band.name} placeholder photo ${i + 1}`}
-                                                className="w-full aspect-[16/9] object-cover"
-                                                width={800}
-                                                height={450}
-                                                style={{width: '100%', height: 'auto'}}
-                                            />
-                                            <div
-                                                className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
-                                                <Button
-                                                    type="primary"
-                                                    icon={<EditOutlined/>}
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        message.info('Add image functionality coming soon');
-                                                    }}
-                                                >
-                                                    Add Image
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    </Col>
-                                ))
+                                <Col span={24}>
+                                    <Text type="secondary" italic>No photos available.</Text>
+                                </Col>
                             )}
                         </Row>
                     </div>
@@ -243,12 +223,9 @@ export default function BandViewContent({params}: BandViewContentProps) {
                         <Title level={4} className="mb-4">Biography</Title>
                         <Card className="prose max-w-none">
                             {band.bio ? (
-                                <div dangerouslySetInnerHTML={{__html: band.bio}}/>
+                                <div dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(band.bio)}}/>
                             ) : (
-                                <div className="flex items-center justify-between">
-                                    <Text type="secondary" italic>No biography available yet.</Text>
-                                    <Button type="primary" icon={<EditOutlined/>}>Add Bio</Button>
-                                </div>
+                                <Text type="secondary" italic>No biography available yet.</Text>
                             )}
                         </Card>
                     </div>
@@ -285,7 +262,7 @@ export default function BandViewContent({params}: BandViewContentProps) {
                             </Col>
                             <Col xs={24} md={12}>
                                 <Card title="Social Media" size="small">
-                                    <Space direction="vertical" className="w-full">
+                                    <Space orientation="vertical" className="w-full">
                                         {band.facebook_url && (
                                             <Button
                                                 icon={<FacebookOutlined/>}
@@ -339,7 +316,7 @@ export default function BandViewContent({params}: BandViewContentProps) {
                     <div>
                         <Title level={4} className="mb-4">Genres</Title>
                         <Card size="small">
-                            <Space direction="vertical" className="w-full">
+                            <Space orientation="vertical" className="w-full">
                                 <div>
                                     <Text strong>Primary Genres</Text><br/>
                                     <Space wrap className="mt-2">
@@ -458,16 +435,25 @@ export default function BandViewContent({params}: BandViewContentProps) {
             <Card className="mb-6">
                 <div className="flex flex-wrap items-start gap-6">
                     {/* Profile Image */}
-                    <div
-                        className="w-32 h-32 rounded-lg bg-gray-100 shadow-sm flex items-center justify-center overflow-hidden">
-                        <Image
-                            src={`https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(band.name)}`}
-                            alt={band.name}
-                            className="w-full h-full"
-                            width={128}
-                            height={128}
-                        />
-                    </div>
+                    {band.images && band.images.length > 0 && band.images[0].filename ? (
+                        <div
+                            className="w-32 h-32 rounded-lg bg-gray-100 shadow-sm flex items-center justify-center overflow-hidden">
+                            <Image
+                                src={buildImageUrl(band.images[0].path, band.images[0].thumbname || band.images[0].filename)}
+                                alt={band.name}
+                                className="w-full h-full object-cover"
+                                width={128}
+                                height={128}
+                            />
+                        </div>
+                    ) : (
+                        <div
+                            className="w-32 h-32 rounded-lg bg-gray-200 shadow-sm flex items-center justify-center overflow-hidden">
+                            <span className="text-4xl font-semibold text-gray-400">
+                                {band.name?.charAt(0)?.toUpperCase() || '?'}
+                            </span>
+                        </div>
+                    )}
 
                     {/* Title and Meta Info */}
                     <div className="flex-1">
@@ -492,7 +478,7 @@ export default function BandViewContent({params}: BandViewContentProps) {
                                 </Space>
                             </div>
                             <Space>
-                                <Link href={`/bands/edit/${band.id}/${band.slug}`}>
+                                <Link href={nav.createContextualHref(`/bands/edit/${band.id}/${band.slug}`)}>
                                     <Button
                                         type="primary"
                                         icon={<EditOutlined/>}

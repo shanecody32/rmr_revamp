@@ -164,12 +164,12 @@ export function createThumbnail(file: File, size: number = 300): Promise<Process
 
 export function getImageUrl(path: string, type: 'original' | 'thumbnail' = 'original'): string {
     if (!path) return '';
-    
-    // Use the image proxy for external images
+
+    // If it's already a full URL, return as-is
     if (path.startsWith('http')) {
-        return `/api/image-proxy?url=${encodeURIComponent(path)}`;
+        return path;
     }
-    
+
     // For local images, construct the URL based on type
     if (type === 'thumbnail' && !path.includes('thumbnail')) {
         const parts = path.split('.');
@@ -177,6 +177,6 @@ export function getImageUrl(path: string, type: 'original' | 'thumbnail' = 'orig
         const name = parts.join('.');
         return `${name}-thumbnail.${ext}`;
     }
-    
+
     return path;
 }

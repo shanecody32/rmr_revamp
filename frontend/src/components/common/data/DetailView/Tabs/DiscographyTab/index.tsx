@@ -1,5 +1,7 @@
 'use client'
 
+import {useMemo} from 'react';
+
 import type {AlbumWithRelationsResponse} from '@/types/api/albums';
 
 import AlbumCard from './AlbumCard';
@@ -9,7 +11,17 @@ interface DiscographyTabProps {
 }
 
 export default function DiscographyTab({albums}: DiscographyTabProps) {
-    if (!albums?.length) {
+    const sorted = useMemo(() => {
+        if (!albums?.length) return [];
+        return [...albums].sort((a, b) => {
+            if (!a.release_date && !b.release_date) return 0;
+            if (!a.release_date) return 1;
+            if (!b.release_date) return -1;
+            return new Date(b.release_date).getTime() - new Date(a.release_date).getTime();
+        });
+    }, [albums]);
+
+    if (!sorted.length) {
         return (
             <div className="text-center text-gray-500 p-8">
                 No albums found.
@@ -19,7 +31,7 @@ export default function DiscographyTab({albums}: DiscographyTabProps) {
 
     return (
         <div className="space-y-4">
-            {albums.map((album) => (
+            {sorted.map((album) => (
                 <AlbumCard
                     key={`album-${album.id}`}
                     album={album}

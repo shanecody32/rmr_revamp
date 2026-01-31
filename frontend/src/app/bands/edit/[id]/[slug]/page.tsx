@@ -23,7 +23,15 @@ export default async function BandEditPage({
 
     return (
         <>
-            <PageHeader title={`Edit Band: ${formattedName}`}/>
+            <PageHeader
+                title={`Edit Band: ${formattedName}`}
+                entityName="bands"
+                actionName="edit"
+                entityId={resolvedParams.id}
+                entitySlug={resolvedParams.slug}
+                backHref="/bands"
+                backText="Back to Bands"
+            />
             <Suspense fallback={<LoadingSpinner/>}>
                 <BandEditContent id={resolvedParams.id} slug={resolvedParams.slug}/>
             </Suspense>

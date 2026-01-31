@@ -1,13 +1,19 @@
 [package]
 name = "migration"
-version.workspace = true
-edition.workspace = true
+version = "0.1.0"
+edition = "2024"
 
 [lib]
 name = "migration"
 path = "src/lib.rs"
 
+[[bin]]
+name = "migration"
+path = "src/main.rs"
+
 [dependencies]
-async-std.workspace = true
-sea-orm-migration.workspace = true
-tokio.workspace = true
+async-std = { version = "1", features = ["attributes", "tokio1"] }
+sea-orm-migration = { version = "2.0.0-rc.28", features = ["sqlx-mysql", "runtime-tokio-rustls"] }
+tokio = { version = "1", features = ["full"] }
+
+[workspace]

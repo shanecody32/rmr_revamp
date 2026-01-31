@@ -16,9 +16,6 @@ export const FIELD_GROUPS: FieldGroup[] = [
         title: 'Location',
         fields: [
             {key: 'location_display', label: 'Location', special: 'location'},
-            {key: 'country_id', label: 'Country ID', hidden: true},
-            {key: 'state_id', label: 'State ID', hidden: true},
-            {key: 'city_id', label: 'City ID', hidden: true},
         ]
     },
     {
@@ -57,14 +54,6 @@ export const FIELD_GROUPS: FieldGroup[] = [
             {key: 'seven_digital_id', label: '7digital ID'},
             {key: 'discogs_id', label: 'Discogs ID'},
             {key: 'rdio_id', label: 'Rdio ID'},
-        ]
-    },
-    {
-        key: 'status',
-        title: 'Status',
-        fields: [
-            {key: 'verified', label: 'Verified'},
-            {key: 'approved', label: 'Approved'},
         ]
     }
 ];

@@ -2,6 +2,7 @@
 
 import {Card, Space, Tag} from 'antd';
 
+import {getAlbumDisplayImageUrl} from '@/lib/utils/media';
 import type {AlbumWithRelationsResponse} from '@/types/api/albums';
 
 import AlbumDetails from './AlbumDetails';
@@ -22,7 +23,7 @@ export default function AlbumCard({album}: AlbumCardProps) {
         >
             <div className="flex gap-4">
                 <AlbumImage
-                    src={album.img}
+                    src={getAlbumDisplayImageUrl(album)}
                     alt={album.name}
                 />
 

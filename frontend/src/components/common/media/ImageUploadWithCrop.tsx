@@ -341,7 +341,7 @@ export const ImageUploadWithCrop: React.FC<ImageUploadWithCropProps> = ({
             />
           )}
         </div>
-        <Space direction="vertical" style={{ width: '100%', marginTop: 16 }}>
+        <Space orientation="vertical" style={{ width: '100%', marginTop: 16 }}>
           <div>
             <span>Zoom: </span>
             <Slider
@@ -412,7 +412,7 @@ export const ImageUploadWithCrop: React.FC<ImageUploadWithCropProps> = ({
             />
           )}
         </div>
-        <Space direction="vertical" style={{ width: '100%', marginTop: 16 }}>
+        <Space orientation="vertical" style={{ width: '100%', marginTop: 16 }}>
           <div>
             <span>Zoom: </span>
             <Slider

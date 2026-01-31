@@ -4,6 +4,7 @@ import {CheckCircleOutlined, WarningOutlined} from '@ant-design/icons';
 import {Card, Col, Descriptions, Divider, Empty, Row, Tag, Typography} from 'antd';
 import React from 'react';
 
+import DOMPurify from 'dompurify';
 import LocationDisplay from '@/components/common/data/LocationDisplay';
 import ResponsiveImage from '@/components/common/layout/ResponsiveImage';
 import WebsiteLink from '@/components/common/navigation/WebsiteLink';
@@ -124,7 +125,7 @@ export default function MergePreview({originalBand, allBands, selectedValues, se
                             {mergedBand.bio ? (
                                 <div>
                                     <Text strong>Biography:</Text>
-                                    <div className="mt-1" dangerouslySetInnerHTML={{__html: mergedBand.bio as string}}/>
+                                    <div className="mt-1" dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(mergedBand.bio as string)}}/>
                                 </div>
                             ) : (
                                 <div>

@@ -4,7 +4,7 @@
 export const config = {
     // API configuration
     api: {
-        baseUrl: 'http://localhost:5151/api',
+        baseUrl: 'http://localhost:8000',
         timeout: 30000, // 30 seconds
         retries: 3, // Number of retries for failed requests
     },
@@ -17,9 +17,9 @@ export const config = {
 
     // Media configuration
     media: {
-        // Base URL for all images (Next.js serves from public directory at root)
-        imagePath: '/',
-        fallbackImage: 'https://www.rootsmusicreport.com/img/no_image.jpg',
+        // All media served through the backend /media endpoint
+        baseUrl: 'http://localhost:8000/media',
+        fallbackImage: 'http://localhost:8000/media/no_image.jpg',
     },
 
     // Feature flags

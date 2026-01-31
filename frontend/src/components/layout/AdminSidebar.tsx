@@ -2,55 +2,115 @@
 
 
 import {
+  ApiOutlined,
   BarChartOutlined,
+  CopyOutlined,
   CustomerServiceOutlined,
   HomeOutlined,
   PictureOutlined,
+  SettingOutlined,
   SoundOutlined,
   TeamOutlined,
+  UnorderedListOutlined,
+  UserOutlined,
 } from '@ant-design/icons';
+import type {MenuProps} from 'antd';
 import {Layout, Menu} from 'antd';
 import Link from 'next/link';
-import {usePathname, useRouter} from 'next/navigation';
+import {usePathname} from 'next/navigation';
 import {useState} from 'react';
 
 const {Sider} = Layout;
 
+type MenuItem = Required<MenuProps>['items'][number];
+
 export default function AdminSidebar() {
-    const router = useRouter();
     const pathname = usePathname();
     const [collapsed, setCollapsed] = useState(false);
 
-    const menuItems = [
+    // Determine which menu key should be selected based on pathname
+    const getSelectedKey = () => {
+        if (pathname?.startsWith('/bands/duplicates')) return '/bands/duplicates';
+        if (pathname?.startsWith('/bands')) return '/bands';
+        if (pathname?.startsWith('/staff')) return '/staff';
+        return pathname || '/';
+    };
+
+    // Determine which submenu should be open
+    const getOpenKeys = () => {
+        if (pathname?.startsWith('/bands')) return ['bands-submenu'];
+        if (pathname?.startsWith('/radio-stations') || pathname?.startsWith('/staff')) return ['stations-submenu'];
+        return [];
+    };
+
+    const menuItems: MenuItem[] = [
         {
             key: '/',
             icon: <HomeOutlined/>,
-            label: 'Dashboard',
+            label: <Link href="/">Dashboard</Link>,
         },
         {
-            key: '/bands',
+            key: 'bands-submenu',
             icon: <TeamOutlined/>,
             label: 'Bands',
+            children: [
+                {
+                    key: '/bands',
+                    icon: <UnorderedListOutlined/>,
+                    label: <Link href="/bands">All Bands</Link>,
+                },
+                {
+                    key: '/bands/duplicates',
+                    icon: <CopyOutlined/>,
+                    label: <Link href="/bands/duplicates">Duplicate Checker</Link>,
+                },
+            ],
         },
         {
             key: '/songs',
             icon: <SoundOutlined/>,
-            label: 'Songs',
+            label: <Link href="/songs">Songs</Link>,
         },
         {
             key: '/albums',
             icon: <PictureOutlined/>,
-            label: 'Albums',
+            label: <Link href="/albums">Albums</Link>,
         },
         {
-            key: '/radio-stations',
+            key: 'stations-submenu',
             icon: <CustomerServiceOutlined/>,
             label: 'Radio Stations',
+            children: [
+                {
+                    key: '/radio-stations',
+                    icon: <UnorderedListOutlined/>,
+                    label: <Link href="/radio-stations">All Stations</Link>,
+                },
+                {
+                    key: '/staff',
+                    icon: <UserOutlined/>,
+                    label: <Link href="/staff">Staff Members</Link>,
+                },
+            ],
         },
         {
             key: '/charts',
             icon: <BarChartOutlined/>,
-            label: 'Charts',
+            label: <Link href="/charts">Charts</Link>,
+        },
+        {
+            key: '/system',
+            icon: <SettingOutlined/>,
+            label: <Link href="/system">System</Link>,
+        },
+        {
+            key: 'rapidoc',
+            icon: <ApiOutlined/>,
+            label: (
+                <a href="http://localhost:8000/rapidoc" target="_blank" rel="noopener noreferrer">
+                    API Docs
+                </a>
+            ),
         },
     ];
 
@@ -74,15 +134,9 @@ export default function AdminSidebar() {
             <Menu
                 theme="dark"
                 mode="inline"
-                selectedKeys={[pathname || '/']}
-                items={menuItems.map(item => ({
-                    ...item,
-                    label: (
-                        <Link href={item.key}>
-                            {item.label}
-                        </Link>
-                    )
-                }))}
+                selectedKeys={[getSelectedKey()]}
+                defaultOpenKeys={getOpenKeys()}
+                items={menuItems}
             />
         </Sider>
     );

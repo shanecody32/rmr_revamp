@@ -80,14 +80,10 @@ export default function StateTypeahead({
         loadState();
     }, [value, currentState]);
 
-    const handleSearch = async (search: string) => {
-        if (!search) {
-            return;
-        }
-
+    const loadOptions = async (search?: string) => {
         setLoading(true);
         try {
-            const statesData = await searchStates(search, countryId);
+            const statesData = await searchStates(search || undefined, countryId);
             setOptions(statesData.map(state => ({
                 label: state.name,
                 value: state.id,
@@ -99,6 +95,16 @@ export default function StateTypeahead({
         }
     };
 
+    const handleSearch = async (search: string) => {
+        await loadOptions(search);
+    };
+
+    const handleOpenChange = (open: boolean) => {
+        if (open) {
+            loadOptions();
+        }
+    };
+
     return (
         <Select
             showSearch
@@ -106,6 +112,7 @@ export default function StateTypeahead({
             placeholder={placeholder}
             loading={loading}
             onSearch={handleSearch}
+            onOpenChange={handleOpenChange}
             onChange={(value, option) => {
                 const selectedState = value ? {
                     id: value,

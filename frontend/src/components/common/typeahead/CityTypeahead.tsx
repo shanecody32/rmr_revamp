@@ -82,14 +82,10 @@ export default function CityTypeahead({
         loadCity();
     }, [value, currentCity]);
 
-    const handleSearch = async (search: string) => {
-        if (!search) {
-            return;
-        }
-
+    const loadOptions = async (search?: string) => {
         setLoading(true);
         try {
-            const citiesData = await searchCities(search, {countryId, stateId});
+            const citiesData = await searchCities(search || undefined, {countryId, stateId});
             setOptions(citiesData.map(city => ({
                 label: city.name,
                 value: city.id,
@@ -101,6 +97,16 @@ export default function CityTypeahead({
         }
     };
 
+    const handleSearch = async (search: string) => {
+        await loadOptions(search);
+    };
+
+    const handleOpenChange = (open: boolean) => {
+        if (open) {
+            loadOptions();
+        }
+    };
+
     return (
         <Select
             showSearch
@@ -108,6 +114,7 @@ export default function CityTypeahead({
             placeholder={placeholder}
             loading={loading}
             onSearch={handleSearch}
+            onOpenChange={handleOpenChange}
             onChange={(value, option) => {
                 const selectedCity = value ? {
                     id: value,

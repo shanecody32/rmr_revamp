@@ -27,9 +27,9 @@ export default function ResponsiveImage({
                                             fallback = FALLBACK_IMAGE,
                                             className = '',
                                             objectFit = 'cover',
-                                            aspectRatio,
-                                            width,
-                                            height,
+                                            aspectRatio="1/1",
+                                            width = 96,
+                                            height = 96,
                                             onLoad,
                                             onError,
                                         }: ResponsiveImageProps) {

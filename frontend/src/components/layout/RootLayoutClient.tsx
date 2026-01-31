@@ -1,12 +1,13 @@
 'use client'
 
-import {StyleProvider} from '@ant-design/cssinjs';
+import {AntdRegistry} from '@ant-design/nextjs-registry';
 import {App, ConfigProvider, Layout, theme} from 'antd';
 import enUS from 'antd/locale/en_US';
 import * as React from 'react';
 
 
 import {AuthProvider} from '@/contexts/AuthContext';
+import {JobProvider} from '@/contexts/JobContext';
 import {LocationProvider} from '@/contexts/LocationContext';
 
 import AdminHeader from './AdminHeader';
@@ -30,8 +31,9 @@ export default function RootLayoutClient({children}: RootLayoutClientProps) {
     }
 
     return (
-        <StyleProvider hashPriority="high">
+        <AntdRegistry>
             <AuthProvider>
+                <JobProvider>
                 <LocationProvider>
                     <ConfigProvider
                         locale={enUS}
@@ -61,7 +63,8 @@ export default function RootLayoutClient({children}: RootLayoutClientProps) {
                         </App>
                     </ConfigProvider>
                 </LocationProvider>
+                </JobProvider>
             </AuthProvider>
-        </StyleProvider>
+        </AntdRegistry>
     );
 }

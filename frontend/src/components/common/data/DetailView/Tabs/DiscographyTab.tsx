@@ -1,10 +1,11 @@
 'use client'
 
 import {Card, Collapse, List, Space, Tag, Typography} from 'antd';
+import {useMemo} from 'react';
 
 import ResponsiveImage from '@/components/common/layout/ResponsiveImage';
 import {formatDate} from '@/lib/utils';
-import {getFallbackImageUrl} from '@/lib/utils/media';
+import {getAlbumDisplayImageUrl, getFallbackImageUrl} from '@/lib/utils/media';
 import type {AlbumWithRelationsResponse} from '@/types/api/albums';
 
 const {Text, Link} = Typography;
@@ -16,7 +17,17 @@ interface DiscographyTabProps {
 }
 
 export default function DiscographyTab({albums}: DiscographyTabProps) {
-    if (!albums?.length) {
+    const sorted = useMemo(() => {
+        if (!albums?.length) return [];
+        return [...albums].sort((a, b) => {
+            if (!a.release_date && !b.release_date) return 0;
+            if (!a.release_date) return 1;
+            if (!b.release_date) return -1;
+            return new Date(b.release_date).getTime() - new Date(a.release_date).getTime();
+        });
+    }, [albums]);
+
+    if (!sorted.length) {
         return (
             <div className="text-center text-gray-500 p-8">
                 No albums found.
@@ -26,7 +37,7 @@ export default function DiscographyTab({albums}: DiscographyTabProps) {
 
     return (
         <div className="space-y-4">
-            {albums.map((album) => (
+            {sorted.map((album) => (
                 <Card
                     key={`album-${album.id}`}
                     size="small"
@@ -36,9 +47,12 @@ export default function DiscographyTab({albums}: DiscographyTabProps) {
                         <div className="w-24 h-24 flex-shrink-0">
                             <ResponsiveImage
                                 alt={album.name}
-                                src={album.img}
+                                src={getAlbumDisplayImageUrl(album)}
                                 className="rounded"
                                 objectFit="cover"
+                                width={96}
+                                height={96}
+                                aspectRatio="1/1"
                                 fallback={FALLBACK_IMAGE}
                             />
                         </div>

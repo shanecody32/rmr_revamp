@@ -21,16 +21,12 @@ export default function SubGenreTypeahead({
                                           }: SubGenreTypeaheadProps) {
     const [loading, setLoading] = useState(false);
     const [options, setOptions] = useState<{ label: string; value: number }[]>([]);
+    const [defaultsLoaded, setDefaultsLoaded] = useState(false);
 
-    const handleSearch = async (search: string) => {
-        if (!search) {
-            setOptions([]);
-            return;
-        }
-
+    const loadOptions = async (search?: string) => {
         setLoading(true);
         try {
-            const subGenres = await searchSubGenres(search, genreId);
+            const subGenres = await searchSubGenres(search || undefined, genreId);
             setOptions(subGenres.map(subGenre => ({
                 label: subGenre.name,
                 value: subGenre.id,
@@ -42,6 +38,18 @@ export default function SubGenreTypeahead({
         }
     };
 
+    const handleSearch = async (search: string) => {
+        await loadOptions(search);
+    };
+
+    const handleOpenChange = (open: boolean) => {
+        if (open) {
+            // Always reload when opening since genreId may have changed
+            setDefaultsLoaded(true);
+            loadOptions();
+        }
+    };
+
     return (
         <Select
             showSearch
@@ -49,6 +57,7 @@ export default function SubGenreTypeahead({
             placeholder="Select sub-genre"
             loading={loading}
             onSearch={handleSearch}
+            onOpenChange={handleOpenChange}
             onChange={(value, option) => {
                 // Handle both single option and array of options
                 const selectedOption = Array.isArray(option) ? option[0] : option;
@@ -61,7 +70,6 @@ export default function SubGenreTypeahead({
             options={options}
             filterOption={false}
             allowClear
-            disabled={!genreId}
         />
     );
 }

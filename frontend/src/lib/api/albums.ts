@@ -32,3 +32,8 @@ export async function createAlbum(data: Partial<AlbumResponse>): Promise<AlbumRe
     const response = await api.post<AlbumResponse>('/albums', data);
     return response.data;
 }
+
+export async function updateAlbum(id: number, data: Partial<AlbumResponse>): Promise<AlbumResponse> {
+    const response = await api.put<AlbumResponse>(`/albums/${id}`, data);
+    return response.data;
+}

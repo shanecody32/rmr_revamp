@@ -3,30 +3,28 @@
 import type {ColumnType, TablePaginationConfig} from 'antd/es/table';
 import type {SorterResult} from 'antd/es/table/interface';
 import {Table} from 'antd';
+import {useMemo} from 'react';
 
 import {getBandColumns} from '@/app/bands/components/bandColumns';
-import type {BandResponse} from '@/types/api';
+import type {BandListViewEnriched} from '@/types/api/bands';
 import type {TableSortParams} from '@/types/table';
 
 interface BandsTableProps {
-    data: BandResponse[];
+    data: BandListViewEnriched[];
     loading: boolean;
     currentPage: number;
     pageSize: number;
     total: number;
     sortParams: TableSortParams;
     visibleColumns: string[];
-    searchFilters?: {
-        genre_id?: number;
-        sub_genre_id?: number;
-    };
     onTableChange: (
         pagination: TablePaginationConfig,
         _: any,
-        sorter: SorterResult<BandResponse> | SorterResult<BandResponse>[]
+        sorter: SorterResult<BandListViewEnriched> | SorterResult<BandListViewEnriched>[]
     ) => void;
-    onRowClick: (record: BandResponse) => void;
-    onVerifyClick?: (record: BandResponse) => void;
+    onRowClick: (record: BandListViewEnriched) => void;
+    onVerifyClick?: (record: BandListViewEnriched) => void;
+    onFindComparisons?: (record: BandListViewEnriched) => void;
     verifyingBandId?: number | null;
 }
 
@@ -38,30 +36,29 @@ export default function BandsTable({
                                        total,
                                        sortParams,
                                        visibleColumns,
-                                       searchFilters = {},
                                        onTableChange,
                                        onRowClick,
                                        onVerifyClick,
+                                       onFindComparisons,
                                        verifyingBandId
                                    }: BandsTableProps) {
-    const bandColumns = getBandColumns({
-        searchedGenreId: searchFilters.genre_id,
-        searchedSubGenreId: searchFilters.sub_genre_id,
+    const bandColumns = useMemo(() => getBandColumns({
         onVerifyClick,
+        onFindComparisons,
         verifyingBandId
-    });
+    }), [onVerifyClick, onFindComparisons, verifyingBandId]);
 
     const normalizedSortField = typeof sortParams.field === 'string' ? sortParams.field : undefined;
     const normalizedSortOrder = sortParams.order ?? null;
 
-    const visibleBandColumns = bandColumns
+    const visibleBandColumns = useMemo(() => bandColumns
         .filter(col => visibleColumns.includes(col.key as string))
         .map(col => {
             if ('children' in col && col.children) {
                 return col;
             }
 
-            const sortableColumn = col as ColumnType<BandResponse>;
+            const sortableColumn = col as ColumnType<BandListViewEnriched>;
 
             if (!sortableColumn.sorter) {
                 return sortableColumn;
@@ -76,7 +73,7 @@ export default function BandsTable({
                 ...sortableColumn,
                 sortOrder: isActiveSort ? normalizedSortOrder : null,
             };
-        });
+        }), [bandColumns, visibleColumns, normalizedSortField, normalizedSortOrder]);
 
     return (
         <>

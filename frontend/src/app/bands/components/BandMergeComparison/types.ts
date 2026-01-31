@@ -19,7 +19,6 @@ export interface FieldDefinition {
     key: string;
     label: string;
     special?: string;
-    hidden?: boolean;
 }
 
 export interface FieldGroup {

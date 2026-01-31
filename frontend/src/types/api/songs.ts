@@ -25,7 +25,10 @@ export interface SongWithTrackInfoResponse {
     album_id: number;
     song_id: number;
     track_number: number;
-    created_at: string;
-    updated_at: string;
+    disc_number?: number;
+    created_at?: string;
+    updated_at?: string;
+    created?: string;
+    modified?: string;
     song: SongResponse;
 }

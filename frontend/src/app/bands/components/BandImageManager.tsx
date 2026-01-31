@@ -8,6 +8,7 @@ import React, { useState, useEffect } from 'react';
 
 
 import { bandImagesApi } from '@/lib/api/band-images';
+import { buildImageUrl } from '@/lib/utils/media';
 import type { BandImageResponse } from '@/types/api/bands';
 
 import { ImageUploadWithCrop } from '../../../components/common/media/ImageUploadWithCrop';
@@ -78,11 +79,7 @@ const SortableImageItem: React.FC<SortableImageItemProps> = ({ image, bandSlug, 
           <Image
             width={80}
             height={80}
-            src={(() => {
-              const url = `/${image.path}/${image.thumbname}`;
-              console.log('Thumbnail URL:', url);
-              return url;
-            })()}
+            src={buildImageUrl(image.path, image.thumbname)}
             preview={false}
             style={{ objectFit: 'cover', borderRadius: 4 }}
           />
@@ -241,13 +238,13 @@ export const BandImageManager: React.FC<BandImageManagerProps> = ({
 
   return (
     <Card title="Band Images" extra={`${images.length} / ${maxImages} images`}>
-      <Space direction="vertical" style={{ width: '100%' }} size="large">
+      <Space orientation="vertical" style={{ width: '100%' }} size="large">
         {images.length < maxImages && (
           <ImageUploadWithCrop onUpload={handleUpload} />
         )}
 
         {loading ? (
-          <Spin tip="Loading images..." />
+          <Spin tip="Loading images..."><div /></Spin>
         ) : images.length > 0 ? (
           <DndContext
             sensors={sensors}
@@ -289,11 +286,7 @@ export const BandImageManager: React.FC<BandImageManagerProps> = ({
         {previewImage && (
           <div style={{ textAlign: 'center' }}>
             <Image
-              src={(() => {
-                const url = `/${previewImage.path}/${previewImage.filename}`;
-                console.log('Preview image URL:', url);
-                return url;
-              })()}
+              src={buildImageUrl(previewImage.path, previewImage.filename)}
               alt={previewImage.filename || 'Band Image'}
               style={{ maxWidth: '100%' }}
             />

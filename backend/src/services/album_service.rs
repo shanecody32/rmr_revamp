@@ -793,26 +793,16 @@ impl AlbumService {
             .await?;
 
         if albums.is_empty() {
-            tracing::debug!("Chunk {}: No albums found", chunk_idx);
             return Ok(());
         }
 
         let album_ids: Vec<u32> = albums.iter().map(|a| a.id).collect();
-        tracing::debug!(
-            "Chunk {}: Loaded {} albums (IDs {} to {})",
-            chunk_idx,
-            albums.len(),
-            album_ids.first().unwrap_or(&0),
-            album_ids.last().unwrap_or(&0)
-        );
 
         // Query 2: Load all album_songs junction records for this chunk
         let album_songs: Vec<AlbumSongModel> = AlbumSong::find()
             .filter(AlbumSongColumn::AlbumId.is_in(album_ids.clone()))
             .all(db)
             .await?;
-
-        tracing::debug!("Chunk {}: Found {} album_songs records", chunk_idx, album_songs.len());
 
         // Query 3: Load all songs referenced by album_songs
         let song_ids: Vec<u32> = album_songs.iter().map(|as_| as_.song_id).collect();
@@ -824,8 +814,6 @@ impl AlbumService {
                 .all(db)
                 .await?
         };
-
-        tracing::debug!("Chunk {}: Loaded {} songs", chunk_idx, songs.len());
 
         // Build lookup maps in memory
         let songs_by_id: HashMap<u32, &SongModel> = songs.iter().map(|s| (s.id, s)).collect();
@@ -854,24 +842,12 @@ impl AlbumService {
             .collect();
 
         let needs_update_count = updates.iter().filter(|u| u.needs_update).count();
-        tracing::debug!(
-            "Chunk {}: {} albums need genre update out of {}",
-            chunk_idx,
-            needs_update_count,
-            updates.len()
-        );
 
         // Query 4: Bulk delete existing album_sub_genres for this chunk
-        let delete_result = AlbumSubGenre::delete_many()
+        AlbumSubGenre::delete_many()
             .filter(AlbumSubGenreColumn::AlbumId.is_in(album_ids.clone()))
             .exec(db)
             .await?;
-
-        tracing::debug!(
-            "Chunk {}: Deleted {} album_sub_genres records",
-            chunk_idx,
-            delete_result.rows_affected
-        );
 
         // Query 5: Bulk insert new album_sub_genres
         let all_inserts: Vec<AlbumSubGenreActiveModel> = updates
@@ -884,12 +860,6 @@ impl AlbumService {
                 })
             })
             .collect();
-
-        tracing::debug!(
-            "Chunk {}: Inserting {} album_sub_genres records",
-            chunk_idx,
-            all_inserts.len()
-        );
 
         if !all_inserts.is_empty() {
             // Insert in sub-batches to avoid overly large INSERT statements
@@ -912,25 +882,13 @@ impl AlbumService {
             }
         }
 
-        tracing::debug!(
-            "Chunk {}: Updating albums across {} distinct genre values",
-            chunk_idx,
-            updates_by_genre.len()
-        );
-
         for (genre_id, album_ids_for_genre) in &updates_by_genre {
-            let update_result = Album::update_many()
+            Album::update_many()
                 .col_expr(AlbumColumn::SubGenreForCharting, Expr::value(*genre_id))
                 .filter(AlbumColumn::Id.is_in(album_ids_for_genre.clone()))
                 .exec(db)
                 .await?;
 
-            tracing::debug!(
-                "Chunk {}: Updated {} albums to genre {:?}",
-                chunk_idx,
-                update_result.rows_affected,
-                genre_id
-            );
         }
 
         tracing::info!(

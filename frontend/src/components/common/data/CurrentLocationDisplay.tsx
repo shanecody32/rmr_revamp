@@ -54,7 +54,7 @@ export default function CurrentLocationDisplay({
     }, [cityId, citiesCache, addCityToCache]);
 
     return (
-        <Space direction="vertical" className="mb-4 w-full">
+        <Space orientation="vertical" className="mb-4 w-full">
             <div>
                 <Text strong>Current Location:</Text>{' '}
                 {hasLocation ? (

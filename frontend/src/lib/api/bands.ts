@@ -1,25 +1,35 @@
 'use client'
 
-import type {BandResponse, BandWithDiscographyResponse} from '@/types/api/bands';
-import type {GenreResponse, SubGenreResponse} from '@/types/api/locations';
+import type {
+    BandResponse,
+    BandWithDiscographyResponse,
+    BandListViewEnriched,
+    BandDetailView,
+    AlbumSummary,
+    ApiSuccessResponse,
+    MergeResult,
+} from '@/types/api/bands';
 import type {ApiParams, NameFilterType, PaginationResponse} from '@/types/api/common';
+import {nameFilterTypeMap} from '@/types/api/common';
 
 import {api} from './config';
 
-interface SimilarBand {
+export interface SimilarBand {
     id: number;
     name: string;
-    similarity: number;
+    similarity_score: number;
     verified: boolean;
     approved: boolean;
 }
 
-interface SimilarityParams {
+export interface SimilarityParams {
     search_term: string;
     existing_id?: number;
     jw_weight?: number;
     dice_weight?: number;
     min_similarity?: number;
+    restrict_to_parent?: boolean;
+    limit?: number;
 }
 
 interface MergeBandsRequest {
@@ -38,9 +48,18 @@ export const fetchSimilarBands = async (params: SimilarityParams): Promise<Simil
     }
 };
 
-export const mergeBands = async (data: MergeBandsRequest): Promise<BandResponse> => {
+/**
+ * Merge multiple bands into one.
+ * This operation can take significant time as it moves all related data.
+ * Timeout is extended to 5 minutes for this operation.
+ */
+export const mergeBands = async (data: MergeBandsRequest): Promise<MergeResult> => {
     try {
-        const response = await api.post<BandResponse>('/bands/merge', data);
+        const response = await api.post<MergeResult>('/bands/merge', data, {
+            // Extended timeout for merge operations (5 minutes)
+            // Merge can be slow as it moves images, songs, albums, playlists, etc.
+            timeout: 5 * 60 * 1000,
+        });
         return response.data;
     } catch (error) {
         console.error('Error merging bands:', error);
@@ -83,270 +102,87 @@ interface FetchBandsParams extends ApiParams {
     };
 }
 
-const BANDS_QUERY = `
-    query Bands(
-        $filters: BandsFilterInput
-        $order_by: BandsOrderInput
-        $pagination: PaginationInput
-    ) {
-        bands(filters: $filters, order_by: $order_by, pagination: $pagination) {
-            nodes {
-                id
-                name
-                slug
-                verified
-                verified_by_id
-                approved
-                approved_by_id
-                created_at
-                updated_at
-                website
-                email
-                twitter
-                facebook_url
-                lastfm_url
-                myspace_url
-                google_url
-                wikipedia_url
-                cdbaby_url
-                youtube_url
-                reverb_url
-                itunes_url
-                instagram_url
-                pinterest_url
-                itunes_id
-                amg_id
-                rovi_id
-                echo_id
-                seven_digital_id
-                discogs_id
-                spotify_id
-                rdio_id
-                rss_feed
-                bio
-                hot_download
-                city_id
-                state_id
-                country_id
-                reviewed_by_id
-                country: countries {
-                    id
-                    name
-                    slug
-                }
-                state: states {
-                    id
-                    name
-                    slug
-                }
-                city: cities {
-                    id
-                    name
-                    slug
-                }
-                genre_links: bands_sub_genres {
-                    nodes {
-                        sub_genre: sub_genres {
-                            id
-                            name
-                            slug
-                            chart
-                            default
-                            genre_id
-                            created_at
-                            updated_at
-                            genre: genres {
-                                id
-                                name
-                                slug
-                                chart
-                                created_at
-                                updated_at
-                            }
-                        }
-                    }
-                }
-            }
-            paginationInfo: pagination_info {
-                total
-                pages
-                current
-            }
-        }
-    }
-`;
-
-const nameFilterOperationMap: Record<NameFilterType, string> = {
-    contains: 'contains',
-    startswith: 'starts_with',
-    endswith: 'ends_with',
-    exact: 'eq'
-};
-
-type GraphQLSubGenreNode = SubGenreResponse & {
-    genre?: GenreResponse | null;
-};
-
-type GraphQLBandNode = Omit<BandResponse, 'genres' | 'sub_genres'> & {
-    genre_links?: {
-        nodes?: Array<{
-            sub_genre?: GraphQLSubGenreNode | null;
-        } | null> | null;
-    } | null;
-};
-
-interface BandsQueryResponse {
-    data?: {
-        bands?: {
-            nodes?: GraphQLBandNode[] | null;
-            paginationInfo?: {
-                total?: number | null;
-                pages?: number | null;
-                current?: number | null;
-            } | null;
-        } | null;
-    };
-    errors?: Array<{ message?: string }>;
-}
-
 export const fetchBands = async (params: FetchBandsParams): Promise<{
     data: BandResponse[];
     pagination: PaginationResponse;
 }> => {
     try {
-        const pageSize = params.page_size ?? 10;
-        const currentPage = Math.max((params.page ?? 1) - 1, 0);
-
-        const filtersInput: Record<string, any> = {};
+        // Build query params for REST API
+        const queryParams: Record<string, string | number | boolean> = {
+            page: params.page ?? 1,
+            page_size: params.page_size ?? 10,
+        };
 
         if (params.name) {
-            const filterType = params.name_filter_type ?? 'contains';
-            const operation = nameFilterOperationMap[filterType];
-            filtersInput.name = {[operation]: params.name};
+            queryParams.name = params.name;
+            const filterType = (params.name_filter_type ?? 'contains') as NameFilterType;
+            queryParams.name_filter_type = nameFilterTypeMap[filterType] ?? filterType;
         }
 
         if (params.country_id) {
-            filtersInput.country_id = {eq: params.country_id};
+            queryParams.country_id = params.country_id;
         }
 
         if (params.state_id) {
-            filtersInput.state_id = {eq: params.state_id};
+            queryParams.state_id = params.state_id;
         }
 
         if (params.city_id) {
-            filtersInput.city_id = {eq: params.city_id};
+            queryParams.city_id = params.city_id;
+        }
+
+        if (params.genre_id) {
+            queryParams.genre_id = params.genre_id;
+        }
+
+        if (params.sub_genre_id) {
+            queryParams.sub_genre_id = params.sub_genre_id;
         }
 
         if (typeof params.verified === 'boolean') {
-            filtersInput.verified = {eq: params.verified};
+            queryParams.verified = params.verified;
         }
 
         if (typeof params.approved === 'boolean') {
-            filtersInput.approved = {eq: params.approved};
+            queryParams.approved = params.approved;
         }
 
+        // Handle filter presets
         if (params.filters) {
             if (params.filters.verified_approved) {
-                filtersInput.verified = {eq: true};
-                filtersInput.approved = {eq: true};
+                queryParams.verified = true;
+                queryParams.approved = true;
             } else if (params.filters.verified_pending) {
-                filtersInput.verified = {eq: true};
-                filtersInput.approved = {eq: false};
+                queryParams.verified = true;
+                queryParams.approved = false;
             } else if (params.filters.approved_only) {
-                filtersInput.verified = {eq: false};
-                filtersInput.approved = {eq: true};
+                queryParams.verified = false;
+                queryParams.approved = true;
             } else if (params.filters.pending_all) {
-                filtersInput.verified = {eq: false};
-                filtersInput.approved = {eq: false};
+                queryParams.verified = false;
+                queryParams.approved = false;
             }
         }
-
-        const orderByInput: Record<string, 'ASC' | 'DESC'> = {};
 
         if (params.sort_field) {
-            orderByInput[params.sort_field] = params.sort_ascending === false ? 'DESC' : 'ASC';
+            queryParams.sort_field = params.sort_field;
+            queryParams.sort_ascending = params.sort_ascending !== false;
         }
 
-        const requestVariables: Record<string, unknown> = {
-            pagination: {
-                page: {
-                    page: currentPage,
-                    limit: pageSize
-                }
-            },
-            filters: Object.keys(filtersInput).length ? filtersInput : {},
-            order_by: Object.keys(orderByInput).length ? orderByInput : {},
+        console.log('[Bands REST] Request params:', queryParams);
+
+        const response = await api.get<{
+            results: BandResponse[];
+            pagination: PaginationResponse;
+        }>('/bands', { params: queryParams });
+
+        console.log('[Bands REST] Response:', response.data);
+
+        // Map 'results' to 'data' for consistency with frontend expectations
+        return {
+            data: response.data.results,
+            pagination: response.data.pagination,
         };
-
-        console.log('[Bands GraphQL] Request variables:', requestVariables);
-
-        const response = await api.post<BandsQueryResponse>('/graphql', {
-            query: BANDS_QUERY,
-            variables: requestVariables
-        });
-
-        console.log('[Bands GraphQL] Response payload:', response.data);
-
-        if (response.data.errors?.length) {
-            const [firstError] = response.data.errors;
-            throw new Error(firstError?.message || 'Failed to fetch bands');
-        }
-
-        const connection = response.data.data?.bands;
-        const nodes = (connection?.nodes ?? []).filter(Boolean) as GraphQLBandNode[];
-
-        const bands = nodes.map((node) => {
-            const {genre_links, ...band} = node;
-            const genreNodes = genre_links?.nodes ?? [];
-
-            const genreMap = new Map<number, GenreResponse>();
-            const subGenreMap = new Map<number, SubGenreResponse>();
-
-            genreNodes.forEach((link) => {
-                const subGenreNode = link?.sub_genre;
-                if (!subGenreNode) {
-                    return;
-                }
-
-                const {genre, ...subGenreRest} = subGenreNode;
-                const normalizedSubGenre = subGenreRest as SubGenreResponse;
-
-                if (!subGenreMap.has(normalizedSubGenre.id)) {
-                    subGenreMap.set(normalizedSubGenre.id, normalizedSubGenre);
-                }
-
-                if (genre && !genreMap.has(genre.id)) {
-                    genreMap.set(genre.id, genre);
-                }
-            });
-
-            return {
-                ...band,
-                verified: Boolean(band.verified),
-                approved: Boolean(band.approved),
-                genres: Array.from(genreMap.values()),
-                sub_genres: Array.from(subGenreMap.values()),
-            } as BandResponse;
-        });
-
-        const paginationInfo = connection?.paginationInfo;
-        const totalCount = paginationInfo?.total ?? bands.length;
-        const totalPages = paginationInfo?.pages ?? 1;
-        const current = (paginationInfo?.current ?? 0) + 1;
-
-        const result = {
-            data: bands,
-            pagination: {
-                page: current,
-                page_size: pageSize,
-                total_pages: totalPages,
-                total_count: totalCount,
-            }
-        };
-
-        console.log('[Bands GraphQL] Normalized result:', result);
-
-        return result;
     } catch (error) {
         console.error('Error fetching bands:', error);
         throw error;
@@ -375,6 +211,127 @@ export const updateBand = async (id: number, data: Partial<BandResponse>): Promi
         throw new Error('No data returned from update operation');
     } catch (error) {
         console.error('Error in updateBand:', error);
+        throw error;
+    }
+};
+
+// =============================================================================
+// Optimized View Endpoints
+// =============================================================================
+
+/**
+ * Fetch bands using the optimized lightweight list endpoint.
+ * Returns BandListViewEnriched with only essential fields (~10 columns).
+ * Use this for list/table displays for better performance.
+ */
+export const fetchBandsList = async (params: FetchBandsParams): Promise<{
+    data: BandListViewEnriched[];
+    pagination: PaginationResponse;
+}> => {
+    try {
+        const queryParams: Record<string, string | number | boolean> = {
+            page: params.page ?? 1,
+            page_size: params.page_size ?? 10,
+        };
+
+        if (params.name) {
+            queryParams.name = params.name;
+            const filterType = (params.name_filter_type ?? 'contains') as NameFilterType;
+            queryParams.name_filter_type = nameFilterTypeMap[filterType] ?? filterType;
+        }
+
+        if (params.country_id) queryParams.country_id = params.country_id;
+        if (params.state_id) queryParams.state_id = params.state_id;
+        if (params.city_id) queryParams.city_id = params.city_id;
+        if (params.genre_id) queryParams.genre_id = params.genre_id;
+        if (params.sub_genre_id) queryParams.sub_genre_id = params.sub_genre_id;
+        if (typeof params.verified === 'boolean') queryParams.verified = params.verified;
+        if (typeof params.approved === 'boolean') queryParams.approved = params.approved;
+
+        // Handle filter presets
+        if (params.filters) {
+            if (params.filters.verified_approved) {
+                queryParams.verified = true;
+                queryParams.approved = true;
+            } else if (params.filters.verified_pending) {
+                queryParams.verified = true;
+                queryParams.approved = false;
+            } else if (params.filters.approved_only) {
+                queryParams.verified = false;
+                queryParams.approved = true;
+            } else if (params.filters.pending_all) {
+                queryParams.verified = false;
+                queryParams.approved = false;
+            }
+        }
+
+        if (params.sort_field) {
+            queryParams.sort_field = params.sort_field;
+            queryParams.sort_ascending = params.sort_ascending !== false;
+        }
+
+        const response = await api.get<ApiSuccessResponse<{
+            results: (BandListViewEnriched & { created?: string; modified?: string; verified?: number | boolean; approved?: number | boolean })[];
+            pagination: PaginationResponse;
+        }>>('/bands/list', { params: queryParams });
+
+        // Normalize backend field names to match frontend conventions
+        const normalizedResults = response.data.data.results.map(item => ({
+            ...item,
+            verified: Boolean(item.verified),
+            approved: Boolean(item.approved),
+            created_at: item.created_at || item.created || '',
+            updated_at: item.updated_at || item.modified || '',
+        }));
+
+        return {
+            data: normalizedResults,
+            pagination: response.data.data.pagination,
+        };
+    } catch (error) {
+        console.error('Error fetching bands list:', error);
+        throw error;
+    }
+};
+
+/**
+ * Fetch band detail with optional album loading.
+ * Use include_albums=true to get discography in a single request.
+ */
+export const fetchBandDetail = async (
+    id: number,
+    options?: { includeAlbums?: boolean }
+): Promise<BandDetailView> => {
+    try {
+        const params: Record<string, boolean> = {};
+        if (options?.includeAlbums) {
+            params.include_albums = true;
+        }
+
+        const response = await api.get<ApiSuccessResponse<BandDetailView>>(
+            `/bands/${id}/detail`,
+            { params }
+        );
+
+        return response.data.data;
+    } catch (error) {
+        console.error('Error fetching band detail:', error);
+        throw error;
+    }
+};
+
+/**
+ * Fetch band discography as lightweight summaries.
+ * Use this when displaying discography in band detail views.
+ */
+export const fetchBandDiscographySummary = async (id: number): Promise<AlbumSummary[]> => {
+    try {
+        const response = await api.get<ApiSuccessResponse<{ albums: AlbumSummary[] }>>(
+            `/bands/${id}/discography/summary`
+        );
+        return response.data.data.albums;
+    } catch (error) {
+        console.error('Error fetching band discography summary:', error);
         throw error;
     }
 };

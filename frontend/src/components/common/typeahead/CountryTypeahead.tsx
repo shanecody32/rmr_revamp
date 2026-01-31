@@ -68,14 +68,12 @@ export default function CountryTypeahead({
         loadCountry();
     }, [value, currentCountry]);
 
-    const handleSearch = async (search: string) => {
-        if (!search) {
-            return;
-        }
+    const [defaultsLoaded, setDefaultsLoaded] = useState(false);
 
+    const loadOptions = async (search?: string) => {
         setLoading(true);
         try {
-            const countriesData = await searchCountries(search);
+            const countriesData = await searchCountries(search || undefined);
             setOptions(countriesData.map(country => ({
                 label: country.name,
                 value: country.id,
@@ -87,6 +85,17 @@ export default function CountryTypeahead({
         }
     };
 
+    const handleSearch = async (search: string) => {
+        await loadOptions(search);
+    };
+
+    const handleOpenChange = (open: boolean) => {
+        if (open && !defaultsLoaded) {
+            setDefaultsLoaded(true);
+            loadOptions();
+        }
+    };
+
     return (
         <Select
             showSearch
@@ -94,6 +103,7 @@ export default function CountryTypeahead({
             placeholder={placeholder}
             loading={loading}
             onSearch={handleSearch}
+            onOpenChange={handleOpenChange}
             onChange={(value, option) => {
                 const selectedCountry = value ? {
                     id: value,

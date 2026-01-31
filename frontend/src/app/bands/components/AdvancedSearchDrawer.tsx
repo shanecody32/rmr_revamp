@@ -38,46 +38,15 @@ export default function AdvancedSearchDrawer({
 
     // Initialize form with saved filters when drawer opens
     useEffect(() => {
-        // Only proceed if component is mounted and form is valid
         if (!mounted.current || !form) return;
 
         if (open) {
-            // Wrap in a setTimeout to ensure form is connected
-            setTimeout(() => {
-                if (!mounted.current || !form) return;
-
-                form.setFieldsValue({
-                    name_filter_type: filterType,
-                    ...filters
-                });
-            }, 0);
+            form.setFieldsValue({
+                name_filter_type: filterType,
+                ...filters
+            });
         }
     }, [open, form, filterType, filters]);
-
-    // Watch for field changes using Form.useWatch
-    Form.useWatch('genre_id', form);
-    Form.useWatch('sub_genre_id', form);
-
-    // Handle field dependencies
-    useEffect(() => {
-        // Only proceed if component is mounted and form is valid
-        if (!mounted.current || !form) return;
-
-        // Wrap in a setTimeout to ensure form is connected
-        setTimeout(() => {
-            if (!mounted.current || !form) return;
-
-            const values = form.getFieldsValue(['genre_id', 'sub_genre_id']);
-
-            if (values.genre_id && values.sub_genre_id) {
-                if (values.genre_id) {
-                    form.setFieldValue('sub_genre_id', undefined);
-                } else if (values.sub_genre_id) {
-                    form.setFieldValue('genre_id', undefined);
-                }
-            }
-        }, 0);
-    }, [form]);
 
     const handleSubmit = async () => {
         if (!mounted.current) return;
@@ -90,6 +59,12 @@ export default function AdvancedSearchDrawer({
             const cleanValues = Object.fromEntries(
                 Object.entries(values).filter(([_, value]) => value !== undefined && value !== '')
             );
+
+            // When sub_genre_id is set, it takes full priority over genre_id.
+            // Genre selection is only a UX helper to narrow sub-genre options.
+            if (cleanValues.sub_genre_id) {
+                delete cleanValues.genre_id;
+            }
 
             // Update filter type if changed
             if (values.name_filter_type) {

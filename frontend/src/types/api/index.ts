@@ -4,3 +4,4 @@ export * from './songs';
 export * from './albums';
 export * from './radio-stations';
 export * from './auth';
+export * from './staff';

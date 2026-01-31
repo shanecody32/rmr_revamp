@@ -24,26 +24,27 @@ import {
   VerticalAlignBottomOutlined,
   VerticalAlignTopOutlined,
 } from '@ant-design/icons';
-import CharacterCount from '@tiptap/extension-character-count';
-import Color from '@tiptap/extension-color';
-import Highlight from '@tiptap/extension-highlight';
-import Image from '@tiptap/extension-image';
-import Link from '@tiptap/extension-link';
-import Placeholder from '@tiptap/extension-placeholder';
-import Subscript from '@tiptap/extension-subscript';
-import Superscript from '@tiptap/extension-superscript';
-import Table from '@tiptap/extension-table';
-import TableCell from '@tiptap/extension-table-cell';
-import TableHeader from '@tiptap/extension-table-header';
-import TableRow from '@tiptap/extension-table-row';
-import TaskItem from '@tiptap/extension-task-item';
-import TaskList from '@tiptap/extension-task-list';
-import TextAlign from '@tiptap/extension-text-align';
-import TextStyle from '@tiptap/extension-text-style';
-import Typography from '@tiptap/extension-typography';
-import Underline from '@tiptap/extension-underline';
-import {BubbleMenu, EditorContent, useEditor} from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
+import {CharacterCount} from '@tiptap/extension-character-count';
+import {Color} from '@tiptap/extension-color';
+import {Highlight} from '@tiptap/extension-highlight';
+import {Image} from '@tiptap/extension-image';
+import {Link} from '@tiptap/extension-link';
+import {Placeholder} from '@tiptap/extension-placeholder';
+import {Subscript} from '@tiptap/extension-subscript';
+import {Superscript} from '@tiptap/extension-superscript';
+import {Table} from '@tiptap/extension-table';
+import {TableCell} from '@tiptap/extension-table-cell';
+import {TableHeader} from '@tiptap/extension-table-header';
+import {TableRow} from '@tiptap/extension-table-row';
+import {TaskItem} from '@tiptap/extension-task-item';
+import {TaskList} from '@tiptap/extension-task-list';
+import {TextAlign} from '@tiptap/extension-text-align';
+import {TextStyle} from '@tiptap/extension-text-style';
+import {Typography as TiptapTypography} from '@tiptap/extension-typography';
+import {Underline} from '@tiptap/extension-underline';
+import {BubbleMenu} from '@tiptap/react/menus';
+import {EditorContent, useEditor} from '@tiptap/react';
+import {StarterKit} from '@tiptap/starter-kit';
 import {Button, Divider, Space, Tooltip} from 'antd';
 
 interface WysiwygInputProps {
@@ -79,7 +80,7 @@ const WysiwygInput: React.FC<WysiwygInputProps> = ({value = '', onChange, placeh
             Highlight.configure({
                 multicolor: true,
             }),
-            Typography,
+            TiptapTypography,
             TaskList,
             TaskItem.configure({
                 nested: true,
@@ -132,7 +133,7 @@ const WysiwygInput: React.FC<WysiwygInputProps> = ({value = '', onChange, placeh
     return (
         <div className="border rounded-md overflow-hidden bg-white">
             {editor && (
-                <BubbleMenu editor={editor} tippyOptions={{duration: 100}}>
+                <BubbleMenu editor={editor}>
                     <Space className="bg-white border rounded-lg shadow-lg p-1">
                         <Button.Group size="small">
                             <Button

@@ -106,17 +106,22 @@ export const fetchStatesByCountry = async (countryId: number): Promise<StateResp
 };
 
 // Cities
-export const searchCities = async (name: string, params?: { stateId?: number; countryId?: number }) => {
-    const response = await api.get<ApiResponse<CityResponse>>('/cities', {
-        params: {
-            name,
-            name_filter_type: nameFilterTypeMap['contains'],
-            state_id: params?.stateId,
-            country_id: params?.countryId,
-            page: 1,
-            page_size: 10
-        }
-    });
+export const searchCities = async (name?: string, params?: { stateId?: number; countryId?: number }) => {
+    const queryParams: Record<string, unknown> = {
+        page: 1,
+        page_size: 20
+    };
+    if (name) {
+        queryParams.name = name;
+        queryParams.name_filter_type = nameFilterTypeMap['contains'];
+    }
+    if (params?.stateId) {
+        queryParams.state_id = params.stateId;
+    }
+    if (params?.countryId) {
+        queryParams.country_id = params.countryId;
+    }
+    const response = await api.get<ApiResponse<CityResponse>>('/cities', { params: queryParams });
     return response.data.results;
 };
 

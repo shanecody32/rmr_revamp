@@ -36,6 +36,7 @@ export function useTableData<T>({
     const [pageSize, setPageSize] = useState(10);
     const [totalPages, setTotalPages] = useState(1);
     const [filters, setFilters] = useState<Record<string, boolean>>({});
+    const [persistedAdditionalParams, setPersistedAdditionalParams] = useState<Record<string, unknown>>({});
     const debouncedSearch = useDebouncedValue(searchTerm, 300);
 
     const fetchDataRef = useRef(fetchData);
@@ -58,9 +59,19 @@ export function useTableData<T>({
         page?: number,
         size?: number,
         sort?: TableSortParams,
-        additionalParams: Record<string, unknown> = {}
+        additionalParams?: Record<string, unknown>
     ) => {
         if (!mounted.current) return;
+
+        // When additionalParams are explicitly provided, persist them.
+        // When not provided (auto re-fetch), use previously persisted ones.
+        const effectiveAdditionalParams = additionalParams !== undefined
+            ? additionalParams
+            : persistedAdditionalParams;
+
+        if (additionalParams !== undefined) {
+            setPersistedAdditionalParams(additionalParams);
+        }
 
         const requestId = ++latestRequestIdRef.current;
 
@@ -96,7 +107,7 @@ export function useTableData<T>({
                 name_filter_type: filterType,
                 filters: Object.keys(activeFilters).length > 0 ? activeFilters : undefined,
                 ...defaultParamsRef.current,
-                ...additionalParams,
+                ...effectiveAdditionalParams,
             };
 
             const result = await fetchDataRef.current(params);
@@ -121,7 +132,8 @@ export function useTableData<T>({
                 setLoading(false);
             }
         }
-    }, [currentPage, pageSize, totalPages, total, sortParams, debouncedSearch, filterType, filters]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentPage, pageSize, sortParams, debouncedSearch, filterType, filters, persistedAdditionalParams]);
 
     useEffect(() => {
         fetchTableData();
@@ -186,6 +198,10 @@ export function useTableData<T>({
         );
     }, [fetchTableData]);
 
+    const clearAdditionalParams = useCallback(() => {
+        setPersistedAdditionalParams({});
+    }, []);
+
     return {
         loading,
         data,
@@ -201,6 +217,7 @@ export function useTableData<T>({
         setFilters: handleFilterChange,
         loadData: fetchTableData,
         refresh: fetchTableData,
+        clearAdditionalParams,
         sortParams,
         handleTableChange,
     };

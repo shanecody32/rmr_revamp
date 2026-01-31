@@ -22,8 +22,9 @@ import { BandImageManager } from '@/components/common/media';
 import CityTypeahead from '@/components/common/typeahead/CityTypeahead';
 import CountryTypeahead from '@/components/common/typeahead/CountryTypeahead';
 import StateTypeahead from '@/components/common/typeahead/StateTypeahead';
-import {fetchBandById, updateBand} from '@/lib/api/bands';
-import type {BandWithDiscographyResponse} from '@/types/api/bands';
+import {fetchBandDetail, updateBand} from '@/lib/api/bands';
+import {getAlbumDisplayImageUrl, getFallbackImageUrl} from '@/lib/utils/media';
+import type {BandDetailView} from '@/types/api/bands';
 import type {CityResponse, CountryResponse, StateResponse} from '@/types/api/locations';
 
 
@@ -66,7 +67,7 @@ interface BandEditContentProps {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export default function BandEditContent({id, slug}: BandEditContentProps) {
     // slug is used for routing but not needed in the component logic
-    const [band, setBand] = useState<BandWithDiscographyResponse | null>(null);
+    const [band, setBand] = useState<BandDetailView | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const {message} = App.useApp();
@@ -81,7 +82,7 @@ export default function BandEditContent({id, slug}: BandEditContentProps) {
         const loadBand = async () => {
             try {
                 setLoading(true);
-                const data = await fetchBandById(parseInt(id));
+                const data = await fetchBandDetail(parseInt(id), { includeAlbums: true });
                 setBand(data);
 
                 // Set initial form values
@@ -229,7 +230,7 @@ export default function BandEditContent({id, slug}: BandEditContentProps) {
     }
 
     // Album cover fallback image
-    const FALLBACK_IMAGE = 'https://rootsmusicreport.com/img/no_image.jpg';
+    const FALLBACK_IMAGE = getFallbackImageUrl();
 
     const items = [
         {
@@ -372,7 +373,7 @@ export default function BandEditContent({id, slug}: BandEditContentProps) {
                                         <List.Item.Meta
                                             avatar={
                                                 <Avatar
-                                                    src={album.img || FALLBACK_IMAGE}
+                                                    src={getAlbumDisplayImageUrl(album)}
                                                     shape="square"
                                                     size={64}
                                                 />
@@ -537,7 +538,7 @@ export default function BandEditContent({id, slug}: BandEditContentProps) {
                             defaultActiveKey="basic"
                             items={items}
                             size="large"
-                            destroyInactiveTabPane={false}
+                            destroyOnHidden={false}
                         />
                     </Card>
                 </Form>
