@@ -1,4 +1,5 @@
 import {PaginationResponse, RadioStationResponse} from '@/types/api';
+import type {MergeRadioStationsRequest, RadioStationMergeResult} from '@/types/api/radio-stations';
 import type {ApiParams, ApiResponse} from '@/types/api/common';
 import {nameFilterTypeMap} from '@/types/api/common';
 
@@ -28,5 +29,31 @@ export const fetchRadioStations = async (params: ApiParams): Promise<{
 
 export const createRadioStation = async (data: Partial<RadioStationResponse>): Promise<RadioStationResponse> => {
     const response = await api.post<RadioStationResponse>('/radio_stations', data);
+    return response.data;
+};
+
+export const mergeRadioStations = async (data: MergeRadioStationsRequest): Promise<RadioStationMergeResult> => {
+    const response = await api.post<RadioStationMergeResult>('/radio_stations/merge', data, {
+        timeout: 5 * 60 * 1000,
+    });
+    return response.data;
+};
+
+export interface SimilarRadioStation {
+    id: number;
+    name: string;
+    similarity_score: number;
+}
+
+export const fetchSimilarRadioStations = async (params: {
+    search_term: string;
+    existing_id?: number;
+    jw_weight?: number;
+    dice_weight?: number;
+    min_similarity?: number;
+    limit?: number;
+    restrict_to_parent?: boolean;
+}): Promise<SimilarRadioStation[]> => {
+    const response = await api.get<SimilarRadioStation[]>('/radio_stations/similar', {params});
     return response.data;
 };
