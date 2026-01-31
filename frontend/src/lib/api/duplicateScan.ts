@@ -1,7 +1,7 @@
 import {api} from './config';
 
 // Entity types that support duplicate scanning
-export type ScanEntityType = 'bands' | 'albums' | 'labels' | 'radio_stations' | 'staff_members';
+export type ScanEntityType = 'bands' | 'albums' | 'labels' | 'radio_stations' | 'staff_members' | 'songs';
 
 // Types
 export interface ScanStateResponse {

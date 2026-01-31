@@ -15,6 +15,7 @@ pub enum ScanEntityType {
     Labels,
     RadioStations,
     StaffMembers,
+    Songs,
 }
 
 impl fmt::Display for ScanEntityType {
@@ -25,6 +26,7 @@ impl fmt::Display for ScanEntityType {
             ScanEntityType::Labels => write!(f, "labels"),
             ScanEntityType::RadioStations => write!(f, "radio_stations"),
             ScanEntityType::StaffMembers => write!(f, "staff_members"),
+            ScanEntityType::Songs => write!(f, "songs"),
         }
     }
 }
@@ -39,6 +41,7 @@ impl FromStr for ScanEntityType {
             "labels" => Ok(ScanEntityType::Labels),
             "radio_stations" => Ok(ScanEntityType::RadioStations),
             "staff_members" => Ok(ScanEntityType::StaffMembers),
+            "songs" => Ok(ScanEntityType::Songs),
             _ => Err(format!("Unknown entity type: {}", s)),
         }
     }
@@ -53,6 +56,7 @@ impl ScanEntityType {
             ScanEntityType::Labels,
             ScanEntityType::RadioStations,
             ScanEntityType::StaffMembers,
+            ScanEntityType::Songs,
         ]
     }
 
@@ -64,6 +68,7 @@ impl ScanEntityType {
             ScanEntityType::Labels => "Labels",
             ScanEntityType::RadioStations => "Radio Stations",
             ScanEntityType::StaffMembers => "Staff Members",
+            ScanEntityType::Songs => "Songs",
         }
     }
 }

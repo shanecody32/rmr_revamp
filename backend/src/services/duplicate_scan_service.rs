@@ -25,10 +25,16 @@ use crate::models::staff_member_duplicate_candidates::{
     Column as StaffMemberCandidateColumn, Entity as StaffMemberDuplicateCandidate,
     Model as StaffMemberCandidateModel,
 };
+use crate::models::song_duplicate_candidates::{
+    ActiveModel as SongCandidateActiveModel,
+    Column as SongCandidateColumn, Entity as SongDuplicateCandidate,
+    Model as SongCandidateModel,
+};
 use crate::models::albums::{Column as AlbumColumn, Entity as Album};
 use crate::models::bands::{Column as BandColumn, Entity as Band};
 use crate::models::labels::{Column as LabelColumn, Entity as Label};
 use crate::models::radio_stations::{Column as RadioStationColumn, Entity as RadioStation};
+use crate::models::songs::{Column as SongColumn, Entity as Song};
 use crate::models::staff_members::{Column as StaffMemberColumn, Entity as StaffMember};
 use crate::models::duplicate_scan_state::{
     ActiveModel as ScanStateActiveModel, Column as ScanStateColumn,
@@ -38,6 +44,7 @@ use crate::services::album_service::AlbumService;
 use crate::services::band_service::BandService;
 use crate::services::label_service::LabelService;
 use crate::services::radio_station_service::RadioStationService;
+use crate::services::song_service::SongService;
 use crate::services::staff_service::StaffService;
 use crate::services::types::{PaginatedResponse, PaginationInfo, SimilarityParams};
 use sea_orm::prelude::Decimal;
@@ -198,6 +205,17 @@ impl From<StaffMemberCandidateModel> for GenericCandidate {
     }
 }
 
+impl From<SongCandidateModel> for GenericCandidate {
+    fn from(c: SongCandidateModel) -> Self {
+        Self {
+            id: c.id, entity_id_1: c.song_id_1, entity_id_2: c.song_id_2,
+            similarity_score: c.similarity_score, match_reasons: c.match_reasons,
+            status: c.status, reviewed_by: c.reviewed_by, reviewed_at: c.reviewed_at,
+            detected_at: c.detected_at,
+        }
+    }
+}
+
 impl DuplicateScanService {
     // ──────────────────────────── helpers ────────────────────────────
 
@@ -229,6 +247,7 @@ impl DuplicateScanService {
             ScanEntityType::Labels => Label::find().count(db).await,
             ScanEntityType::RadioStations => RadioStation::find().count(db).await,
             ScanEntityType::StaffMembers => StaffMember::find().count(db).await,
+            ScanEntityType::Songs => Song::find().count(db).await,
         }
     }
 
@@ -471,6 +490,9 @@ impl DuplicateScanService {
             }
             ScanEntityType::StaffMembers => {
                 Self::process_batch_staff_members(db, &state, batch_size, min_similarity, max_duplicates, jw_weight, dice_weight).await
+            }
+            ScanEntityType::Songs => {
+                Self::process_batch_songs(db, &state, batch_size, min_similarity, max_duplicates, jw_weight, dice_weight).await
             }
         }
     }
@@ -985,6 +1007,95 @@ impl DuplicateScanService {
         Ok((items_processed, duplicates_found, false))
     }
 
+    // ──────────────────────────── batch: songs ────────────────────────────
+
+    async fn process_batch_songs(
+        db: &DatabaseConnection,
+        state: &crate::models::duplicate_scan_state::Model,
+        batch_size: u64,
+        min_similarity: i32,
+        max_duplicates: u32,
+        jw_weight: f64,
+        dice_weight: f64,
+    ) -> Result<(u32, u32, bool), DbErr> {
+        let entity_type = ScanEntityType::Songs;
+        let songs = Song::find()
+            .filter(SongColumn::Id.gt(state.last_processed_id))
+            .order_by_asc(SongColumn::Id)
+            .limit(batch_size)
+            .all(db)
+            .await?;
+
+        if songs.is_empty() {
+            Self::finalize_scan(db, &entity_type, StopReason::Completed, None).await?;
+            return Ok((0, 0, true));
+        }
+
+        let mut items_processed = 0u32;
+        let mut duplicates_found = 0u32;
+        let mut last_id = state.last_processed_id;
+
+        let batch_ids: Vec<u32> = songs.iter().map(|s| s.id).collect();
+        let existing_pairs = Self::get_existing_pairs_song(db, &batch_ids).await?;
+
+        for song in songs {
+            last_id = song.id;
+            items_processed += 1;
+
+            let name = match song.name.as_deref() {
+                Some(n) if !n.is_empty() => n.to_string(),
+                _ => continue,
+            };
+
+            let params = SimilarityParams {
+                search_term: name,
+                existing_id: Some(song.id),
+                jw_weight: Some(jw_weight),
+                dice_weight: Some(dice_weight),
+                min_similarity: Some(min_similarity),
+                limit: Some(50),
+                ..Default::default()
+            };
+
+            match SongService::get_similar_songs(db, params).await {
+                Ok(similar) => {
+                    for result in similar {
+                        let other_id = result.model.id;
+                        if other_id == song.id { continue; }
+                        let (id1, id2) = if song.id < other_id { (song.id, other_id) } else { (other_id, song.id) };
+                        if existing_pairs.contains(&(id1, id2)) { continue; }
+
+                        let now = chrono::Utc::now().naive_utc();
+                        let candidate = SongCandidateActiveModel {
+                            song_id_1: Set(id1), song_id_2: Set(id2),
+                            similarity_score: Set(result.similarity_score),
+                            match_reasons: Set(Some(serde_json::json!({"score": result.similarity_score, "method": "similarity_pipeline"}))),
+                            status: Set(CandidateStatus::Pending.to_string()),
+                            detected_at: Set(now),
+                            scan_settings: Set(Some(serde_json::json!({"min_similarity": min_similarity, "jw_weight": jw_weight, "dice_weight": dice_weight}))),
+                            ..Default::default()
+                        };
+                        match candidate.insert(db).await {
+                            Ok(_) => duplicates_found += 1,
+                            Err(DbErr::Query(RuntimeErr::SqlxError(ref e))) => {
+                                if !format!("{:?}", e).contains("1062") && !format!("{:?}", e).contains("Duplicate entry") {
+                                    tracing::warn!("Failed to insert song candidate: {:?}", e);
+                                }
+                            }
+                            Err(e) => tracing::warn!("Failed to insert song candidate: {:?}", e),
+                        }
+                        if state.duplicates_found + duplicates_found >= max_duplicates { break; }
+                    }
+                }
+                Err(e) => tracing::warn!("Error finding similar songs for {}: {:?}", song.id, e),
+            }
+            if state.duplicates_found + duplicates_found >= max_duplicates { break; }
+        }
+
+        Self::update_progress(db, &entity_type, state, last_id, items_processed, duplicates_found).await?;
+        Ok((items_processed, duplicates_found, false))
+    }
+
     // ──────────────────────────── progress helpers ────────────────────────────
 
     async fn update_progress(
@@ -1104,6 +1215,21 @@ impl DuplicateScanService {
             .all(db)
             .await?;
         Ok(candidates.into_iter().map(|c| (c.staff_member_id_1, c.staff_member_id_2)).collect())
+    }
+
+    async fn get_existing_pairs_song(
+        db: &DatabaseConnection,
+        ids: &[u32],
+    ) -> Result<HashSet<(u32, u32)>, DbErr> {
+        let candidates = SongDuplicateCandidate::find()
+            .filter(
+                Condition::any()
+                    .add(SongCandidateColumn::SongId1.is_in(ids.to_vec()))
+                    .add(SongCandidateColumn::SongId2.is_in(ids.to_vec())),
+            )
+            .all(db)
+            .await?;
+        Ok(candidates.into_iter().map(|c| (c.song_id_1, c.song_id_2)).collect())
     }
 
     // ──────────────────────────── candidates CRUD ────────────────────────────
@@ -1261,6 +1387,15 @@ impl DuplicateScanService {
                     ..Default::default()
                 }.update(db).await?;
             }
+            ScanEntityType::Songs => {
+                SongCandidateActiveModel {
+                    id: Set(candidate_id),
+                    status: Set(status.to_string()),
+                    reviewed_by: Set(user_id),
+                    reviewed_at: Set(Some(now)),
+                    ..Default::default()
+                }.update(db).await?;
+            }
         }
         Ok(())
     }
@@ -1317,6 +1452,15 @@ impl DuplicateScanService {
                     ..Default::default()
                 }.update(db).await?;
             }
+            ScanEntityType::Songs => {
+                SongCandidateActiveModel {
+                    id: Set(candidate_id),
+                    status: Set(CandidateStatus::Pending.to_string()),
+                    reviewed_by: Set(None),
+                    reviewed_at: Set(None),
+                    ..Default::default()
+                }.update(db).await?;
+            }
         }
         Ok(())
     }
@@ -1351,6 +1495,11 @@ impl DuplicateScanService {
             ScanEntityType::StaffMembers => {
                 let mut del = StaffMemberDuplicateCandidate::delete_many();
                 if pending_only { del = del.filter(StaffMemberCandidateColumn::Status.eq("pending")); }
+                del.exec(db).await?.rows_affected
+            }
+            ScanEntityType::Songs => {
+                let mut del = SongDuplicateCandidate::delete_many();
+                if pending_only { del = del.filter(SongCandidateColumn::Status.eq("pending")); }
                 del.exec(db).await?.rows_affected
             }
         };
@@ -1419,6 +1568,17 @@ impl DuplicateScanService {
                     .all(db).await?;
                 Ok(candidates.into_iter().map(GenericCandidate::from).collect())
             }
+            ScanEntityType::Songs => {
+                let candidates = SongDuplicateCandidate::find()
+                    .filter(
+                        Condition::any()
+                            .add(SongCandidateColumn::SongId1.eq(entity_id))
+                            .add(SongCandidateColumn::SongId2.eq(entity_id)),
+                    )
+                    .order_by_desc(SongCandidateColumn::SimilarityScore)
+                    .all(db).await?;
+                Ok(candidates.into_iter().map(GenericCandidate::from).collect())
+            }
         }
     }
 
@@ -1484,6 +1644,17 @@ impl DuplicateScanService {
                     query = query.filter(Condition::any().add(StaffMemberCandidateColumn::StaffMemberId1.eq(eid)).add(StaffMemberCandidateColumn::StaffMemberId2.eq(eid)));
                 }
                 query = query.order_by_desc(StaffMemberCandidateColumn::SimilarityScore);
+                Ok(query.all(db).await?.into_iter().map(GenericCandidate::from).collect())
+            }
+            ScanEntityType::Songs => {
+                let mut query = SongDuplicateCandidate::find();
+                if let Some(ref status) = params.status { query = query.filter(SongCandidateColumn::Status.eq(status)); }
+                if let Some(min) = params.min_score { query = query.filter(SongCandidateColumn::SimilarityScore.gte(min)); }
+                if let Some(max) = params.max_score { query = query.filter(SongCandidateColumn::SimilarityScore.lte(max)); }
+                if let Some(eid) = params.entity_id {
+                    query = query.filter(Condition::any().add(SongCandidateColumn::SongId1.eq(eid)).add(SongCandidateColumn::SongId2.eq(eid)));
+                }
+                query = query.order_by_desc(SongCandidateColumn::SimilarityScore);
                 Ok(query.all(db).await?.into_iter().map(GenericCandidate::from).collect())
             }
         }
@@ -1556,6 +1727,18 @@ impl DuplicateScanService {
                     map.insert(e.id, EntitySummary {
                         id: e.id,
                         name,
+                        slug: e.slug.clone().unwrap_or_default(),
+                        verified: e.verified,
+                        approved: e.approved,
+                    });
+                }
+            }
+            ScanEntityType::Songs => {
+                let entities = Song::find().filter(SongColumn::Id.is_in(ids.to_vec())).all(db).await?;
+                for e in entities {
+                    map.insert(e.id, EntitySummary {
+                        id: e.id,
+                        name: e.name.clone().unwrap_or_default(),
                         slug: e.slug.clone().unwrap_or_default(),
                         verified: e.verified,
                         approved: e.approved,
