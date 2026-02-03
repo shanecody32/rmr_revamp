@@ -68,6 +68,20 @@ export interface SimilarSong {
     similarity_score: number;
 }
 
+export const fetchSongById = async (id: number): Promise<SongResponse> => {
+    const response = await api.get<SongResponse>(`/songs/${id}`);
+    return response.data;
+};
+
+export const updateSong = async (id: number, data: Partial<SongResponse>): Promise<SongResponse> => {
+    const response = await api.put<SongResponse>(`/songs/${id}`, data);
+    return response.data;
+};
+
+export const deleteSong = async (id: number): Promise<void> => {
+    await api.delete(`/songs/${id}`);
+};
+
 export const fetchSimilarSongs = async (params: {
     search_term: string;
     existing_id?: number;

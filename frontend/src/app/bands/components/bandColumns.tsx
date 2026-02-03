@@ -1,16 +1,17 @@
 'use client'
 
-import {CheckCircleOutlined, DownOutlined, EditOutlined, EyeOutlined, LoadingOutlined, SearchOutlined} from '@ant-design/icons';
-import {Button, Dropdown, Space, Tag, Tooltip} from 'antd';
+import {Space, Tag, Tooltip} from 'antd';
 import type {ColumnsType} from 'antd/es/table';
-import type {MenuProps} from 'antd';
-import Link from 'next/link';
 
+import {
+    getEntityActionColumn,
+    getIdColumn,
+    getStatusColumn,
+    getCreatedAtColumn,
+    getUpdatedAtColumn,
+} from '@/components/common/columns/entityColumns';
 import {resolveBackendImageUrl} from '@/lib/utils/media';
 import type {BandListViewEnriched} from '@/types/api/bands';
-
-import {formatDate} from '@/lib/utils';
-import {StatusTag} from '@/lib/utils/status';
 
 export const columnOptions = [
     {key: 'actions', label: 'Actions', required: true},
@@ -37,83 +38,15 @@ export const getBandColumns = ({
                                    onFindComparisons,
                                    verifyingBandId
                                }: BandColumnProps): ColumnsType<BandListViewEnriched> => [
-    {
-        key: 'actions',
-        title: 'Actions',
-        fixed: 'left',
-        width: 250,
-        render: (_, record) => {
-            const verifyMenuItems: MenuProps['items'] = [
-                {
-                    key: 'find-comparisons',
-                    icon: <SearchOutlined />,
-                    label: 'Find Comparisons',
-                    onClick: (e) => {
-                        e.domEvent.stopPropagation();
-                        if (onFindComparisons) onFindComparisons(record);
-                    }
-                },
-            ];
-
-            return (
-                <Space>
-                    <Link
-                        href={`/bands/view/${record.id}/${record.slug}`}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <Button
-                            type="link"
-                            icon={<EyeOutlined/>}
-                            size="small"
-                        >
-                            View
-                        </Button>
-                    </Link>
-                    <Link
-                        href={`/bands/edit/${record.id}/${record.slug}`}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <Button
-                            type="link"
-                            icon={<EditOutlined/>}
-                            size="small"
-                        >
-                            Edit
-                        </Button>
-                    </Link>
-                    <Space.Compact>
-                        <Button
-                            type="link"
-                            size="small"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                if (onVerifyClick && verifyingBandId !== record.id) onVerifyClick(record);
-                            }}
-                            disabled={verifyingBandId === record.id}
-                        >
-                            {verifyingBandId === record.id ? <LoadingOutlined /> : <CheckCircleOutlined />} Verify
-                        </Button>
-                        <Dropdown menu={{ items: verifyMenuItems }} trigger={['click']}>
-                            <Button
-                                type="link"
-                                size="small"
-                                icon={<DownOutlined />}
-                                onClick={(e) => e.stopPropagation()}
-                            />
-                        </Dropdown>
-                    </Space.Compact>
-                </Space>
-            );
-        },
-    },
-    {
-        key: 'id',
-        title: 'ID',
-        dataIndex: 'id',
-        sorter: true,
-        width: 100,
-        fixed: 'left',
-    },
+    getEntityActionColumn<BandListViewEnriched>({
+        routePrefix: 'bands',
+        getId: (r) => r.id,
+        getSlug: (r) => r.slug || '',
+        onVerifyClick,
+        onFindComparisons,
+        verifyingId: verifyingBandId,
+    }),
+    getIdColumn<BandListViewEnriched>(),
     {
         key: 'name',
         title: 'Name',
@@ -231,28 +164,7 @@ export const getBandColumns = ({
             );
         },
     },
-    {
-        key: 'status',
-        title: 'Status',
-        render: (_, record) => (
-            <StatusTag
-                verified={record.verified || false}
-                approved={record.approved || false}
-            />
-        ),
-    },
-    {
-        key: 'created_at',
-        title: 'Created At',
-        dataIndex: 'created_at',
-        sorter: true,
-        render: formatDate,
-    },
-    {
-        key: 'updated_at',
-        title: 'Updated At',
-        dataIndex: 'updated_at',
-        sorter: true,
-        render: formatDate,
-    },
+    getStatusColumn<BandListViewEnriched>(),
+    getCreatedAtColumn<BandListViewEnriched>(),
+    getUpdatedAtColumn<BandListViewEnriched>(),
 ];

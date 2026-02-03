@@ -1,8 +1,8 @@
 'use client'
 
-import {Button, Checkbox, Collapse, Flex, message, Modal, Select, Slider, Space, Tag, Typography} from 'antd';
-import {SettingOutlined} from '@ant-design/icons';
-import {useEffect, useState} from 'react';
+import {Button, Checkbox, Collapse, Divider, InputNumber, message, Modal, Select, Slider, Space, Switch, Tag, Typography} from 'antd';
+import {PlusOutlined, SearchOutlined, SettingOutlined} from '@ant-design/icons';
+import {useEffect, useRef, useState} from 'react';
 
 const {Text} = Typography;
 
@@ -15,8 +15,52 @@ export interface SimilarEntity {
 
 // Search settings for adjustable similarity search
 export interface SearchSettings {
-    min_similarity: number;  // 20-100, default 40
-    limit: number;           // 10-50, default 20
+    jw_weight: number;       // default 0.6
+    dice_weight: number;     // default 0.4
+    min_similarity: number;  // default 70
+    restrict_to_parent: boolean; // default false
+    limit: number;           // default 20
+}
+
+export const defaultSearchSettings: SearchSettings = {
+    jw_weight: 0.6,
+    dice_weight: 0.4,
+    min_similarity: 70,
+    restrict_to_parent: false,
+    limit: 20,
+};
+
+// Load settings from localStorage
+export const loadSavedSettings = (storageKey: string): SearchSettings => {
+    if (typeof window === 'undefined') return defaultSearchSettings;
+    try {
+        const saved = localStorage.getItem(storageKey);
+        if (saved) {
+            return {...defaultSearchSettings, ...JSON.parse(saved)};
+        }
+    } catch (e) {
+        console.error('Error loading saved settings:', e);
+    }
+    return defaultSearchSettings;
+};
+
+// Save settings to localStorage
+const saveSettings = (storageKey: string, settings: SearchSettings) => {
+    if (typeof window === 'undefined') return;
+    try {
+        localStorage.setItem(storageKey, JSON.stringify(settings));
+    } catch (e) {
+        console.error('Error saving settings:', e);
+    }
+};
+
+// Configuration for manual entity search/add
+export interface ManualSearchConfig<T extends SimilarEntity> {
+    searchEntities: (query: string) => Promise<any[]>;
+    mapToSimilar: (entity: any) => T;
+    excludeId?: number;
+    placeholder?: string;
+    helpText?: string;
 }
 
 // Props for the generic similar entities modal
@@ -46,7 +90,7 @@ export interface SimilarEntitiesModalProps<T extends SimilarEntity> {
     /** Maximum number of selections allowed in multi-select mode */
     maxSelections?: number;
     /** Custom render function for list items */
-    renderItem?: (entity: T, isSelected: boolean) => React.ReactNode;
+    renderItem?: (entity: T, isSelected: boolean, isManuallyAdded: boolean) => React.ReactNode;
     /** Function to get entity ID */
     getEntityId?: (entity: T) => number;
     /** Function to get entity name for display */
@@ -55,11 +99,18 @@ export interface SimilarEntitiesModalProps<T extends SimilarEntity> {
     proceedButtonLabel?: string;
     /** Custom label for the merge button */
     mergeButtonLabel?: string;
-    /** Current search settings */
-    searchSettings?: SearchSettings;
-    /** Whether to show search settings panel */
-    showSearchSettings?: boolean;
+    /** Current search settings (partial — merged with defaults) */
+    searchSettings?: Partial<SearchSettings>;
+    /** When provided, enables localStorage persistence for settings */
+    settingsStorageKey?: string;
+    /** When provided, enables manual entity add via search dropdown */
+    manualSearch?: ManualSearchConfig<T>;
+    /** IDs to pre-select when modal opens */
+    preSelectedIds?: number[];
 }
+
+// Empty array constant to avoid creating new reference on each render
+const EMPTY_ARRAY: number[] = [];
 
 export default function SimilarEntitiesModal<T extends SimilarEntity>({
     open,
@@ -80,27 +131,103 @@ export default function SimilarEntitiesModal<T extends SimilarEntity>({
     proceedButtonLabel,
     mergeButtonLabel,
     searchSettings,
-    showSearchSettings = false,
+    settingsStorageKey,
+    manualSearch,
+    preSelectedIds,
 }: SimilarEntitiesModalProps<T>) {
+    const stablePreSelectedIds = preSelectedIds ?? EMPTY_ARRAY;
     const [selectedEntities, setSelectedEntities] = useState<T[]>([]);
-    const [localSettings, setLocalSettings] = useState<SearchSettings>({
-        min_similarity: searchSettings?.min_similarity ?? 40,
-        limit: searchSettings?.limit ?? 20,
+    const [manuallyAddedEntities, setManuallyAddedEntities] = useState<T[]>([]);
+    const [manualSearchOptions, setManualSearchOptions] = useState<{value: number; label: string; entity: T}[]>([]);
+    const [manualSearchLoading, setManualSearchLoading] = useState(false);
+    const [localSettings, setLocalSettings] = useState<SearchSettings>(() => {
+        const base = settingsStorageKey
+            ? loadSavedSettings(settingsStorageKey)
+            : defaultSearchSettings;
+        return {...base, ...searchSettings};
     });
 
     // Reset selections when modal opens/closes or similarEntities change
     useEffect(() => {
         if (open && similarEntities) {
-            setSelectedEntities([]);
+            if (stablePreSelectedIds.length > 0) {
+                const preSelected = similarEntities.filter(e => stablePreSelectedIds.includes(getEntityId(e)));
+                setSelectedEntities(preSelected);
+            } else {
+                setSelectedEntities([]);
+            }
+            setManuallyAddedEntities([]);
+            setManualSearchOptions([]);
         }
-    }, [open, similarEntities]);
+    }, [open, similarEntities, stablePreSelectedIds]);
 
     // Sync local settings with props
     useEffect(() => {
         if (searchSettings) {
-            setLocalSettings(searchSettings);
+            setLocalSettings(prev => ({...prev, ...searchSettings}));
         }
     }, [searchSettings]);
+
+    // Debounced manual search
+    const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    const handleManualSearch = (searchValue: string) => {
+        if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current);
+        }
+
+        if (!searchValue || searchValue.length < 2 || !manualSearch) {
+            setManualSearchOptions([]);
+            return;
+        }
+
+        searchTimeoutRef.current = setTimeout(async () => {
+            setManualSearchLoading(true);
+            try {
+                const results = await manualSearch.searchEntities(searchValue);
+
+                const existingIds = new Set([
+                    ...similarEntities.map(e => getEntityId(e)),
+                    ...manuallyAddedEntities.map(e => getEntityId(e)),
+                    ...(manualSearch.excludeId ? [manualSearch.excludeId] : []),
+                ]);
+
+                const options = results
+                    .filter((item: any) => !existingIds.has(item.id))
+                    .map((item: any) => {
+                        const mapped = manualSearch.mapToSimilar(item);
+                        return {
+                            value: getEntityId(mapped),
+                            label: getEntityName(mapped),
+                            entity: mapped,
+                        };
+                    });
+
+                setManualSearchOptions(options);
+            } catch (error) {
+                console.error('Error searching entities:', error);
+            } finally {
+                setManualSearchLoading(false);
+            }
+        }, 300);
+    };
+
+    // Cleanup timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (searchTimeoutRef.current) {
+                clearTimeout(searchTimeoutRef.current);
+            }
+        };
+    }, []);
+
+    const handleAddManualEntity = (entityId: number) => {
+        const option = manualSearchOptions.find(o => o.value === entityId);
+        if (option) {
+            setManuallyAddedEntities(prev => [...prev, option.entity]);
+            setManualSearchOptions([]);
+        }
+    };
 
     const handleToggleEntity = (entity: T) => {
         const entityId = getEntityId(entity);
@@ -117,6 +244,7 @@ export default function SimilarEntitiesModal<T extends SimilarEntity>({
 
     const handleCancel = () => {
         setSelectedEntities([]);
+        setManuallyAddedEntities([]);
         onCancel();
     };
 
@@ -132,82 +260,29 @@ export default function SimilarEntitiesModal<T extends SimilarEntity>({
     };
 
     const handleRerunSearch = () => {
+        if (settingsStorageKey) {
+            saveSettings(settingsStorageKey, localSettings);
+        }
         if (onRerunSearch) {
             onRerunSearch(localSettings);
         }
     };
 
-    const renderSearchSettings = () => {
-        if (!showSearchSettings) return null;
-
-        return (
-            <Collapse
-                ghost
-                className="mb-4"
-                items={[
-                    {
-                        key: 'settings',
-                        label: (
-                            <Space>
-                                <SettingOutlined />
-                                <span>Search Settings</span>
-                            </Space>
-                        ),
-                        children: (
-                            <div className="space-y-4">
-                                <div>
-                                    <Text className="block mb-2">Minimum Similarity: {localSettings.min_similarity}%</Text>
-                                    <Slider
-                                        min={20}
-                                        max={100}
-                                        step={5}
-                                        value={localSettings.min_similarity}
-                                        onChange={(value) => setLocalSettings(prev => ({...prev, min_similarity: value}))}
-                                        marks={{
-                                            20: '20%',
-                                            40: '40%',
-                                            60: '60%',
-                                            80: '80%',
-                                            100: '100%'
-                                        }}
-                                    />
-                                    <Text type="secondary" className="text-xs">
-                                        Lower values show more results (broader search), higher values show fewer (stricter matching)
-                                    </Text>
-                                </div>
-                                <div>
-                                    <Text className="block mb-2">Max Results:</Text>
-                                    <Select
-                                        value={localSettings.limit}
-                                        onChange={(value) => setLocalSettings(prev => ({...prev, limit: value}))}
-                                        style={{width: 120}}
-                                        options={[
-                                            {value: 10, label: '10'},
-                                            {value: 20, label: '20'},
-                                            {value: 30, label: '30'},
-                                            {value: 50, label: '50'},
-                                        ]}
-                                    />
-                                </div>
-                                <Button
-                                    type="default"
-                                    onClick={handleRerunSearch}
-                                    loading={loading}
-                                    disabled={loading}
-                                >
-                                    Rerun Search
-                                </Button>
-                            </div>
-                        ),
-                    },
-                ]}
-            />
-        );
-    };
+    // Combine similar entities with manually added entities
+    const allEntities = [...similarEntities, ...manuallyAddedEntities];
 
     // Capitalize entity name for display
     const capitalizedEntityName = entityName.charAt(0).toUpperCase() + entityName.slice(1);
     const pluralEntityName = `${capitalizedEntityName}s`;
+
+    // Calculate column count based on number of entities
+    const getColumnCount = () => {
+        if (allEntities.length <= 3) return 2;
+        if (allEntities.length <= 8) return 3;
+        return 4;
+    };
+
+    const columnCount = getColumnCount();
 
     // Default button labels
     const defaultProceedLabel = mode === 'select-one' ? `Create New ${capitalizedEntityName}` : 'Skip Merge and Edit';
@@ -216,16 +291,13 @@ export default function SimilarEntitiesModal<T extends SimilarEntity>({
     // Create footer buttons based on mode
     const footerButtons = [];
 
-    // Cancel button is always present
     footerButtons.push(
         <Button key="cancel" onClick={handleCancel} disabled={loading}>
             Cancel
         </Button>
     );
 
-    // Add mode-specific buttons
     if (mode === 'select-multiple') {
-        // Add a "Skip Merge" button to go directly to edit
         footerButtons.push(
             <Button
                 key="skipMerge"
@@ -266,33 +338,50 @@ export default function SimilarEntitiesModal<T extends SimilarEntity>({
         : `Select ${pluralEntityName} to Merge`;
 
     // Default item renderer
-    const defaultRenderItem = (entity: T, isSelected: boolean) => (
-        <Flex gap="middle" align="center">
+    const defaultRenderItem = (entity: T, isSelected: boolean, isManuallyAdded: boolean) => (
+        <div className="flex items-start gap-3">
             {mode === 'select-multiple' && (
                 <Checkbox
                     checked={isSelected}
                     onChange={() => handleToggleEntity(entity)}
+                    onClick={(e) => e.stopPropagation()}
                 />
             )}
-            <div>
-                <div><Text strong>{getEntityName(entity)}</Text></div>
-                <Space size="small" className="mt-1">
-                    <Tag color="blue">
-                        Similarity: {entity.similarity_score}%
-                    </Tag>
+            <div className="flex-1 min-w-0">
+                <Text strong className="block truncate" title={getEntityName(entity)}>
+                    {getEntityName(entity)}
+                </Text>
+                <Space size="small" wrap className="mt-2">
+                    {isManuallyAdded ? (
+                        <Tag color="purple">
+                            <PlusOutlined /> Manual
+                        </Tag>
+                    ) : (
+                        <Tag color="blue">
+                            {entity.similarity_score}% match
+                        </Tag>
+                    )}
                 </Space>
+
+                {mode === 'select-one' && (
+                    <Button
+                        type="primary"
+                        size="small"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onSelect(entity);
+                        }}
+                        loading={loading}
+                        disabled={loading}
+                        className="mt-3"
+                        block
+                    >
+                        Select This {capitalizedEntityName}
+                    </Button>
+                )}
             </div>
-        </Flex>
+        </div>
     );
-
-    // Calculate column count based on number of entities
-    const getColumnCount = () => {
-        if (similarEntities.length <= 4) return 2;
-        if (similarEntities.length <= 9) return 3;
-        return 4;
-    };
-
-    const columnCount = getColumnCount();
 
     return (
         <Modal
@@ -300,59 +389,187 @@ export default function SimilarEntitiesModal<T extends SimilarEntity>({
             open={open}
             onCancel={handleCancel}
             footer={footerButtons}
-            width={1100}
+            width={1200}
         >
-            <div className="mb-4">
-                {mode === 'select-one' ? (
-                    <p>We found existing {entityName}s with similar names to &quot;{searchedName}&quot;.
-                       Please check if the {entityName} already exists:</p>
-                ) : (
-                    <p>Select the {entityName}s that appear to be duplicates to merge them ({similarEntities.length} found):</p>
-                )}
+            {/* Source Entity Banner */}
+            <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center gap-3">
+                    <div className="flex-shrink-0">
+                        <Tag color="blue" className="text-base px-3 py-1">Source {capitalizedEntityName}</Tag>
+                    </div>
+                    <div className="flex-1">
+                        <Text strong className="text-lg">{searchedName}</Text>
+                    </div>
+                </div>
+                <Text type="secondary" className="block mt-2 text-sm">
+                    {mode === 'select-one'
+                        ? `Check if this ${entityName} already exists (${allEntities.length} similar found${manuallyAddedEntities.length > 0 ? `, ${manuallyAddedEntities.length} manually added` : ''})`
+                        : `Select ${entityName}s below that are duplicates of this ${entityName} to merge (${allEntities.length} found${manuallyAddedEntities.length > 0 ? `, ${manuallyAddedEntities.length} manually added` : ''})`
+                    }
+                </Text>
             </div>
 
-            {renderSearchSettings()}
+            {/* Manual Entity Add */}
+            {manualSearch && (
+                <div className="mb-4 flex items-center gap-2">
+                    <SearchOutlined className="text-gray-400" />
+                    <Select
+                        showSearch
+                        placeholder={manualSearch.placeholder || `Search and add a ${entityName} manually...`}
+                        style={{flex: 1, maxWidth: 400}}
+                        filterOption={false}
+                        onSearch={handleManualSearch}
+                        onChange={handleAddManualEntity}
+                        loading={manualSearchLoading}
+                        options={manualSearchOptions}
+                        value={null}
+                        notFoundContent={manualSearchLoading ? 'Searching...' : manualSearch.helpText || `Type to search ${entityName}s`}
+                    />
+                    <Text type="secondary" className="text-sm">
+                        {`Add ${entityName}s not found by similarity search`}
+                    </Text>
+                </div>
+            )}
+
+            {(manualSearch) && <Divider className="my-3" />}
+
+            {/* Search Settings Panel */}
+            {onRerunSearch && (
+                <Collapse
+                    ghost
+                    className="mb-4 bg-gray-50 rounded-lg"
+                    items={[
+                        {
+                            key: 'settings',
+                            label: (
+                                <Space>
+                                    <SettingOutlined />
+                                    <span>Search Settings</span>
+                                </Space>
+                            ),
+                            children: (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-2">
+                                    <div>
+                                        <Text className="block mb-2 font-medium">Minimum Similarity: {localSettings.min_similarity}%</Text>
+                                        <Slider
+                                            min={10}
+                                            max={100}
+                                            step={5}
+                                            value={localSettings.min_similarity}
+                                            onChange={(value) => setLocalSettings(prev => ({...prev, min_similarity: value}))}
+                                            marks={{10: '10%', 40: '40%', 70: '70%', 100: '100%'}}
+                                        />
+                                        <Text type="secondary" className="text-xs">
+                                            Lower = more results, Higher = stricter matching
+                                        </Text>
+                                    </div>
+
+                                    <div>
+                                        <Text className="block mb-2 font-medium">Jaro-Winkler Weight</Text>
+                                        <InputNumber
+                                            min={0}
+                                            max={1}
+                                            step={0.1}
+                                            value={localSettings.jw_weight}
+                                            onChange={(value) => setLocalSettings(prev => ({...prev, jw_weight: value ?? 0.6}))}
+                                            style={{width: '100%'}}
+                                        />
+                                        <Text type="secondary" className="text-xs">
+                                            Weight for character-level similarity (0-1)
+                                        </Text>
+                                    </div>
+
+                                    <div>
+                                        <Text className="block mb-2 font-medium">Dice Coefficient Weight</Text>
+                                        <InputNumber
+                                            min={0}
+                                            max={1}
+                                            step={0.1}
+                                            value={localSettings.dice_weight}
+                                            onChange={(value) => setLocalSettings(prev => ({...prev, dice_weight: value ?? 0.4}))}
+                                            style={{width: '100%'}}
+                                        />
+                                        <Text type="secondary" className="text-xs">
+                                            Weight for bigram similarity (0-1)
+                                        </Text>
+                                    </div>
+
+                                    <div>
+                                        <Text className="block mb-2 font-medium">Max Results</Text>
+                                        <Select
+                                            value={localSettings.limit}
+                                            onChange={(value) => setLocalSettings(prev => ({...prev, limit: value}))}
+                                            style={{width: '100%'}}
+                                            options={[
+                                                {value: 10, label: '10'},
+                                                {value: 20, label: '20'},
+                                                {value: 30, label: '30'},
+                                                {value: 50, label: '50'},
+                                                {value: 100, label: '100'},
+                                            ]}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <Text className="block mb-2 font-medium">Restrict to Parent</Text>
+                                        <Switch
+                                            checked={localSettings.restrict_to_parent}
+                                            onChange={(checked) => setLocalSettings(prev => ({...prev, restrict_to_parent: checked}))}
+                                        />
+                                        <Text type="secondary" className="text-xs block mt-1">
+                                            Only search within same parent entity
+                                        </Text>
+                                    </div>
+
+                                    <div className="flex items-end">
+                                        <Button
+                                            type="primary"
+                                            onClick={handleRerunSearch}
+                                            loading={loading}
+                                            disabled={loading}
+                                            block
+                                        >
+                                            Rerun Search
+                                        </Button>
+                                    </div>
+                                </div>
+                            ),
+                        },
+                    ]}
+                />
+            )}
 
             <div
                 style={{
                     display: 'grid',
                     gridTemplateColumns: `repeat(${columnCount}, 1fr)`,
                     gap: '12px',
-                    maxHeight: '60vh',
+                    maxHeight: '50vh',
                     overflowY: 'auto',
                     padding: '4px',
                 }}
             >
-                {similarEntities.map((entity) => {
+                {allEntities.map((entity) => {
                     const entityId = getEntityId(entity);
                     const isSelected = selectedEntities.some(e => getEntityId(e) === entityId);
+                    const isManuallyAdded = manuallyAddedEntities.some(e => getEntityId(e) === entityId);
 
                     return (
                         <div
                             key={entityId}
-                            className={`p-3 border rounded-lg cursor-pointer transition-all ${
+                            className={`p-4 border rounded-lg cursor-pointer transition-all ${
                                 isSelected
-                                    ? 'border-blue-500 bg-blue-50 shadow-sm'
+                                    ? 'border-blue-500 bg-blue-50 shadow-md'
+                                    : isManuallyAdded
+                                    ? 'border-purple-300 bg-purple-50 hover:border-purple-400'
                                     : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
                             }`}
                             onClick={() => mode === 'select-multiple' && handleToggleEntity(entity)}
                         >
-                            {renderItem ? renderItem(entity, isSelected) : defaultRenderItem(entity, isSelected)}
-
-                            {mode === 'select-one' && (
-                                <Button
-                                    type="link"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onSelect(entity);
-                                    }}
-                                    loading={loading}
-                                    disabled={loading}
-                                    className="mt-2 p-0"
-                                >
-                                    Select This {capitalizedEntityName}
-                                </Button>
-                            )}
+                            {renderItem
+                                ? renderItem(entity, isSelected, isManuallyAdded)
+                                : defaultRenderItem(entity, isSelected, isManuallyAdded)
+                            }
                         </div>
                     );
                 })}

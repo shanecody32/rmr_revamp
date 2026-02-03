@@ -17,10 +17,12 @@ use crate::utils::error::handle_internal_error;
 use serde::Deserialize;
 use utoipa::ToSchema;
 use sea_orm::DbErr;
+use tokio_util::sync::CancellationToken;
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        // New entity-type-parameterized routes
+        .route("/summary", get(get_summary))
+        // Entity-type-parameterized routes
         .route("/{entity_type}/state", get(get_scan_state))
         .route("/{entity_type}/start", post(start_scan))
         .route("/{entity_type}/stop", post(stop_scan))
@@ -89,15 +91,27 @@ pub(crate) async fn start_scan(
         Ok(scan_state) => {
             tracing::info!("Duplicate scan job requested to start for {}", et.display_name());
             state.set_scan_running(&et.to_string(), true).await;
+
+            // Create a cancellation token for this scan
+            let token = CancellationToken::new();
+            {
+                let mut tokens = state.duplicate_scan_tokens.write().await;
+                tokens.insert(et.to_string(), token.clone());
+            }
+
             let db = state.db.clone();
             let scans_running = state.duplicate_scans_running.clone();
+            let scan_tokens = state.duplicate_scan_tokens.clone();
             let et_string = et.to_string();
             tokio::spawn(async move {
-                if let Err(e) = DuplicateScanService::run_scan_background(db, et).await {
+                if let Err(e) = DuplicateScanService::run_scan_background(db, et, token).await {
                     tracing::error!("Duplicate scan background job failed: {}", e);
                 }
                 let mut map = scans_running.write().await;
-                map.insert(et_string, false);
+                map.insert(et_string.clone(), false);
+                // Clean up the token
+                let mut tokens = scan_tokens.write().await;
+                tokens.remove(&et_string);
             });
             (StatusCode::ACCEPTED, Json(scan_state)).into_response()
         }
@@ -128,6 +142,14 @@ pub(crate) async fn stop_scan(
         Ok(et) => et,
         Err((code, msg)) => return (code, msg).into_response(),
     };
+    // Cancel the token to signal the background task immediately
+    {
+        let tokens = state.duplicate_scan_tokens.read().await;
+        if let Some(token) = tokens.get(&et.to_string()) {
+            token.cancel();
+        }
+    }
+
     match DuplicateScanService::stop_scan(&state.db, &et).await {
         Ok(scan_state) => {
             state.set_scan_running(&et.to_string(), false).await;
@@ -291,6 +313,23 @@ pub(crate) async fn get_entity_matches(
     };
     match DuplicateScanService::get_entity_matches(&state.db, &et, id).await {
         Ok(matches) => (StatusCode::OK, Json(matches)).into_response(),
+        Err(e) => handle_internal_error(e),
+    }
+}
+
+#[utoipa::path(
+    get,
+    path = "/duplicate-scan/summary",
+    responses(
+        (status = 200, description = "Pending counts per entity type"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub(crate) async fn get_summary(
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    match DuplicateScanService::get_pending_summary(&state.db).await {
+        Ok(summary) => (StatusCode::OK, Json(summary)).into_response(),
         Err(e) => handle_internal_error(e),
     }
 }

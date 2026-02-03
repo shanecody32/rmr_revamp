@@ -8,7 +8,8 @@ import type {BaseFormRef} from '@/components/forms/BaseForm';
 import {createBand, fetchBandById, fetchSimilarBands} from '@/lib/api/bands';
 import type {BandResponse} from '@/types/api/bands';
 
-import SimilarBandsModal from './SimilarBandsModal';
+import SimilarEntitiesModal from '@/components/common/modals/SimilarEntitiesModal';
+import type {SimilarBand} from '@/lib/api/bands';
 
 const bandFields = [
     {
@@ -134,13 +135,14 @@ export default function AddBandModal({open, onCancel, onSuccess}: AddBandModalPr
                 skipSuccessMessage={true} // Skip automatic success message
             />
 
-            <SimilarBandsModal
+            <SimilarEntitiesModal<SimilarBand>
                 open={showSimilarModal}
                 onCancel={() => setShowSimilarModal(false)}
                 onSelect={handleSelectExisting}
                 onProceed={handleProceedWithNew}
-                similarBands={similarBands}
-                newBandName={pendingBandData?.name || ''}
+                similarEntities={similarBands}
+                entityName="band"
+                searchedName={pendingBandData?.name || ''}
                 loading={loading}
             />
         </>

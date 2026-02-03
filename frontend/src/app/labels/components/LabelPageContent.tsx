@@ -3,21 +3,23 @@
 import {PlusOutlined} from '@ant-design/icons';
 import {App, Button, Space} from 'antd';
 import {useRouter} from 'next/navigation';
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
+import EntityTable from '@/components/common/data/tables/EntityTable';
 import TableContainer from '@/components/common/data/tables/TableContainer';
 import TableToolbar from '@/components/common/data/tables/TableToolbar';
 import ErrorAlert from '@/components/common/feedback/ErrorAlert';
-import {columnOptions} from './labelColumns';
+import SimilarEntitiesModal, {type SearchSettings, loadSavedSettings} from '@/components/common/modals/SimilarEntitiesModal';
+import {columnOptions, getLabelColumns} from './labelColumns';
 import {useColumnVisibility} from '@/hooks/useColumnVisibility';
 import {useTableData} from '@/hooks/useTableData';
 import {fetchLabels, fetchSimilarLabels, type SimilarLabel} from '@/lib/api/labels';
 import type {LabelListItem, LabelResponse} from '@/types/api/labels';
 
 import AddLabelModal from './AddLabelModal';
-import LabelTable from './LabelTable';
-import SimilarLabelsModal, {type SearchSettings} from './SimilarLabelsModal';
 import LabelMergeComparison from './LabelMergeComparison';
+
+const SETTINGS_KEY = 'label-similarity-search-settings';
 
 export default function LabelPageContent() {
     const mounted = useRef(true);
@@ -35,24 +37,9 @@ export default function LabelPageContent() {
     const [selectedLabelsToMerge, setSelectedLabelsToMerge] = useState<SimilarLabel[]>([]);
     const [loadingSimilarLabels, setLoadingSimilarLabels] = useState(false);
     const [verifyingLabelId, setVerifyingLabelId] = useState<number | null>(null);
-    const [searchSettings, setSearchSettings] = useState<SearchSettings>(() => {
-        const defaults: SearchSettings = {
-            jw_weight: 0.6,
-            dice_weight: 0.4,
-            min_similarity: 70,
-            limit: 20,
-        };
-        if (typeof window === 'undefined') return defaults;
-        try {
-            const saved = localStorage.getItem('label-similarity-search-settings');
-            if (saved) {
-                return {...defaults, ...JSON.parse(saved)};
-            }
-        } catch (e) {
-            console.error('Error loading saved settings:', e);
-        }
-        return defaults;
-    });
+    const [searchSettings, setSearchSettings] = useState<SearchSettings>(() =>
+        loadSavedSettings(SETTINGS_KEY)
+    );
 
     const {
         loading,
@@ -136,8 +123,6 @@ export default function LabelPageContent() {
 
             setSimilarLabels(similar.filter(l => l.id !== label.id));
 
-            // If forceModal is true, always show modal regardless of results
-            // Otherwise, if no similar labels found, go directly to edit page
             if (!forceModal && similar.length <= 1) {
                 router.push(`/labels/edit/${label.id}/${label.slug}`);
                 return;
@@ -217,6 +202,12 @@ export default function LabelPageContent() {
         router.push(`/labels/view/${record.id}/${record.slug}`);
     };
 
+    const labelColumns = useMemo(() => getLabelColumns({
+        onVerifyClick: handleVerifyClick,
+        onFindComparisons: handleFindComparisons,
+        verifyingLabelId,
+    }), [handleVerifyClick, handleFindComparisons, verifyingLabelId]);
+
     return (
         <>
             {error && (
@@ -253,7 +244,8 @@ export default function LabelPageContent() {
                     </Space>
                 }
             >
-                <LabelTable
+                <EntityTable<LabelListItem>
+                    columns={labelColumns}
                     data={data}
                     loading={loading}
                     currentPage={currentPage}
@@ -263,9 +255,6 @@ export default function LabelPageContent() {
                     visibleColumns={visibleColumns}
                     onTableChange={handleTableChange}
                     onRowClick={handleRowClick}
-                    onVerifyClick={handleVerifyClick}
-                    onFindComparisons={handleFindComparisons}
-                    verifyingLabelId={verifyingLabelId}
                 />
             </TableContainer>
 
@@ -275,19 +264,28 @@ export default function LabelPageContent() {
                 onSuccess={handleAddSuccess}
             />
 
-            <SimilarLabelsModal
+            <SimilarEntitiesModal<SimilarLabel>
                 open={modals.similarLabels}
                 onCancel={() => setModals(prev => ({...prev, similarLabels: false}))}
                 onSelect={handleSelectSimilarLabel}
                 onProceed={handleProceedWithoutMerge}
                 onMergeSelected={handleSelectLabelsToMerge}
                 onRerunSearch={handleRerunSearch}
-                similarLabels={similarLabels}
-                newLabelName={labelToVerify?.name || ''}
+                similarEntities={similarLabels}
+                entityName="label"
+                searchedName={labelToVerify?.name || ''}
                 loading={loadingSimilarLabels}
                 mode="select-multiple"
                 searchSettings={searchSettings}
-                excludeLabelId={labelToVerify?.id}
+                settingsStorageKey={SETTINGS_KEY}
+                manualSearch={{
+                    searchEntities: async (query) => {
+                        const result = await fetchLabels({name: query, name_filter_type: 'contains', page: 1, page_size: 20});
+                        return result.data;
+                    },
+                    mapToSimilar: (label) => ({id: label.id, name: label.name, similarity_score: 0}),
+                    excludeId: labelToVerify?.id,
+                }}
             />
 
             {labelToVerify && (

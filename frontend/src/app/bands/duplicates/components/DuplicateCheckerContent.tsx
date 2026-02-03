@@ -46,9 +46,9 @@ import {
     type ScanStateResponse,
     type StartScanRequest,
 } from '@/lib/api/duplicateScan';
-import {fetchBandById, fetchSimilarBands} from '@/lib/api/bands';
+import {fetchBandById, fetchSimilarBands, type SimilarBand} from '@/lib/api/bands';
 import type {BandResponse} from '@/types/api/bands';
-import SimilarBandsModal, {type SearchSettings} from '../../components/SimilarBandsModal';
+import SimilarEntitiesModal, {type SearchSettings} from '@/components/common/modals/SimilarEntitiesModal';
 import BandMergeComparison from '../../components/BandMergeComparison';
 
 const {Text} = Typography;
@@ -66,6 +66,20 @@ export default function DuplicateCheckerContent() {
     const [pagination, setPagination] = useState({page: 1, pageSize: 20, total: 0});
     const [statusFilter, setStatusFilter] = useState<string>('pending');
     const prevScanRunning = useRef<boolean>(false);
+    const [pendingCount, setPendingCount] = useState<number>(0);
+
+    const loadPendingCount = useCallback(async () => {
+        try {
+            const response = await getCandidatesGrouped('bands', {
+                page: 1,
+                page_size: 1,
+                status: 'pending',
+            });
+            setPendingCount(response.pagination.total_items);
+        } catch (error) {
+            console.error('Failed to load pending count:', error);
+        }
+    }, []);
 
     // Review modal state
     const [isSimilarBandsModalOpen, setIsSimilarBandsModalOpen] = useState(false);
@@ -92,6 +106,7 @@ export default function DuplicateCheckerContent() {
     useEffect(() => {
         loadScanState();
         loadResults();
+        loadPendingCount();
     }, []);
 
     // Sync scan state from SSE context
@@ -101,11 +116,11 @@ export default function DuplicateCheckerContent() {
         }
     }, [scanProgressFromSSE]);
 
-    // Detect scan completion via context
+    // Detect scan completion via context — no toast here, JobContext handles it
     useEffect(() => {
         if (prevScanRunning.current && !isRunning) {
-            message.success('Scan completed');
             loadResults();
+            loadPendingCount();
         }
         prevScanRunning.current = isRunning;
     }, [isRunning]);
@@ -184,6 +199,7 @@ export default function DuplicateCheckerContent() {
             message.success(`Deleted ${result.deleted} candidates`);
             loadResults();
             loadScanState();
+            loadPendingCount();
         } catch (error) {
             message.error('Failed to clear candidates');
         }
@@ -194,6 +210,7 @@ export default function DuplicateCheckerContent() {
             await updateCandidateStatus('bands', candidateId, 'dismissed');
             message.success('Candidate dismissed');
             loadResults();
+            loadPendingCount();
         } catch (error) {
             message.error('Failed to dismiss candidate');
         }
@@ -204,6 +221,7 @@ export default function DuplicateCheckerContent() {
             await restoreCandidate('bands', candidateId);
             message.success('Candidate restored');
             loadResults();
+            loadPendingCount();
         } catch (error) {
             message.error('Failed to restore candidate');
         }
@@ -557,7 +575,7 @@ export default function DuplicateCheckerContent() {
                     <Card title="Quick Stats">
                         <Statistic
                             title="Pending Review"
-                            value={pagination.total}
+                            value={pendingCount}
                             className="mb-4"
                         />
                         {scanState?.stop_reason && (
@@ -673,19 +691,19 @@ export default function DuplicateCheckerContent() {
             </Card>
 
             {/* Modal for showing similar bands and selecting for merge */}
-            <SimilarBandsModal
+            <SimilarEntitiesModal<SimilarBand>
                 open={isSimilarBandsModalOpen}
                 onCancel={() => setIsSimilarBandsModalOpen(false)}
                 onSelect={handleSelectSimilarBand}
                 onProceed={handleProceedWithoutMerge}
                 onMergeSelected={handleSelectBandsToMerge}
                 onRerunSearch={handleRerunSearch}
-                similarBands={similarBands}
-                newBandName={bandToReview?.name || ''}
+                similarEntities={similarBands}
+                entityName="band"
+                searchedName={bandToReview?.name || ''}
                 loading={loadingSimilarBands}
                 mode="select-multiple"
                 searchSettings={searchSettingsForModal}
-                excludeBandId={bandToReview?.id}
                 preSelectedIds={preSelectedBandIds}
             />
 

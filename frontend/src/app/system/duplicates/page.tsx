@@ -1,10 +1,11 @@
 'use client'
 
-import {Tabs, Typography} from 'antd';
+import {Badge, Tabs, Typography} from 'antd';
 import {useRouter, useSearchParams} from 'next/navigation';
-import {Suspense} from 'react';
+import {Suspense, useCallback, useEffect, useState} from 'react';
 import {useJobs} from '@/contexts/JobContext';
 import type {ScanEntityType} from '@/lib/api/duplicateScan';
+import {getDuplicateSummary} from '@/lib/api/duplicateScan';
 
 import BandsDuplicateChecker from '@/app/bands/duplicates/components/DuplicateCheckerContent';
 import AlbumsDuplicateChecker from '@/app/albums/duplicates/components/DuplicateCheckerContent';
@@ -35,8 +36,28 @@ function DuplicateCheckerTabs() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const {isDuplicateScanRunning} = useJobs();
+    const [pendingCounts, setPendingCounts] = useState<Record<string, number>>({});
 
     const activeTab = searchParams.get('tab') || 'bands';
+
+    const loadSummary = useCallback(async () => {
+        try {
+            const summary = await getDuplicateSummary();
+            const counts: Record<string, number> = {};
+            for (const item of summary) {
+                counts[item.entity_type] = item.pending_count;
+            }
+            setPendingCounts(counts);
+        } catch {
+            // Silently ignore - badges just won't show
+        }
+    }, []);
+
+    useEffect(() => {
+        loadSummary();
+        const interval = setInterval(loadSummary, 30000);
+        return () => clearInterval(interval);
+    }, [loadSummary]);
 
     const handleTabChange = (key: string) => {
         router.replace(`/system/duplicates?tab=${key}`);
@@ -44,12 +65,21 @@ function DuplicateCheckerTabs() {
 
     const tabItems = tabs.map((tab) => {
         const isRunning = isDuplicateScanRunning(tab.entityType);
+        const count = pendingCounts[tab.entityType] || 0;
         const Component = tab.component;
         return {
             key: tab.key,
             label: (
                 <span>
                     {tab.label}
+                    {count > 0 && (
+                        <Badge
+                            count={count}
+                            size="small"
+                            style={{marginLeft: 8}}
+                            overflowCount={999}
+                        />
+                    )}
                     {isRunning && (
                         <span
                             style={{
@@ -73,7 +103,6 @@ function DuplicateCheckerTabs() {
             activeKey={activeTab}
             onChange={handleTabChange}
             items={tabItems}
-            destroyInactiveTabPane
         />
     );
 }

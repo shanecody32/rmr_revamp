@@ -1,10 +1,16 @@
+'use client'
+
 import type {ColumnsType} from 'antd/es/table';
 
-import {ActiveStatusTag} from "@/lib/utils/status";
-import {RadioStationResponse} from "@/types/api";
-
-import {getBaseColumns} from '../../../components/tables/columns/baseColumns';
-
+import {
+    getIdColumn,
+    getNameColumn,
+    getStatusColumn,
+    getCreatedAtColumn,
+    getUpdatedAtColumn,
+} from '@/components/common/columns/entityColumns';
+import {ActiveStatusTag} from '@/lib/utils/status';
+import type {RadioStationResponse} from '@/types/api';
 
 export const columnOptions = [
     {key: 'id', label: 'ID'},
@@ -15,17 +21,16 @@ export const columnOptions = [
     {key: 'updated_at', label: 'Updated At'},
 ] as const;
 
-const baseColumns = getBaseColumns<RadioStationResponse>();
-
 export const radioStationColumns: ColumnsType<RadioStationResponse> = [
-    baseColumns[0], // ID
-    baseColumns[1], // Name
-    baseColumns[2], // Status
+    getIdColumn<RadioStationResponse>(),
+    getNameColumn<RadioStationResponse>(),
+    getStatusColumn<RadioStationResponse>(),
     {
         key: 'active',
         title: 'Active Status',
         dataIndex: 'active',
         render: (active: boolean) => <ActiveStatusTag active={active}/>,
     },
-    ...baseColumns.slice(3), // Timestamps
+    getCreatedAtColumn<RadioStationResponse>(),
+    getUpdatedAtColumn<RadioStationResponse>(),
 ];

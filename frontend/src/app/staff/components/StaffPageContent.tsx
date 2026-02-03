@@ -3,12 +3,13 @@
 import {PlusOutlined} from '@ant-design/icons';
 import {App, Button, Space, Switch} from 'antd';
 import {useRouter} from 'next/navigation';
-import {useEffect, useRef, useState} from 'react';
+import {useEffect, useMemo, useRef, useState} from 'react';
 
+import EntityTable from '@/components/common/data/tables/EntityTable';
 import TableContainer from '@/components/common/data/tables/TableContainer';
 import TableToolbar from '@/components/common/data/tables/TableToolbar';
 import ErrorAlert from '@/components/common/feedback/ErrorAlert';
-import {columnOptions} from './staffColumns';
+import {columnOptions, getStaffColumns} from './staffColumns';
 import {useColumnVisibility} from '@/hooks/useColumnVisibility';
 import {useTableData} from '@/hooks/useTableData';
 import {fetchStaffList, fetchStaffById, fetchSimilarStaff, updateStaff} from '@/lib/api/staff';
@@ -16,7 +17,6 @@ import {staffFilterOptions} from '@/lib/config/filterOptions';
 import type {StaffListViewEnriched, StaffSimilarityParams} from '@/types/api/staff';
 
 import AddStaffModal from './AddStaffModal';
-import StaffTable from './StaffTable';
 import SimilarStaffModal, {type SearchSettings} from './SimilarStaffModal';
 import StaffMergeComparisonModal from './StaffMergeComparisonModal';
 
@@ -74,7 +74,6 @@ export default function StaffPageContent() {
         pageSize,
     } = useTableData<StaffListViewEnriched>({
         fetchData: async (params) => {
-            // Convert filters to API params
             const apiParams: Record<string, any> = {
                 ...params,
                 archived: showArchived,
@@ -97,7 +96,6 @@ export default function StaffPageContent() {
             }
 
             const response = await fetchStaffList(apiParams);
-            // Transform response to match useTableData expected format
             return {
                 data: response.results,
                 pagination: response.pagination,
@@ -176,7 +174,6 @@ export default function StaffPageContent() {
     const handleMergeSelection = async (selectedIds: number[]) => {
         if (!staffToVerify) return;
 
-        // Load full details for selected staff
         const staffDetails = await Promise.all([
             fetchStaffById(staffToVerify.id),
             ...selectedIds.map(id => fetchStaffById(id))
@@ -228,6 +225,12 @@ export default function StaffPageContent() {
         message.success('Staff member created successfully');
     };
 
+    const staffColumns = useMemo(() => getStaffColumns({
+        onVerifyClick: handleVerifyClick,
+        onFindComparisons: handleFindComparisons,
+        verifyingStaffId,
+    }), [handleVerifyClick, handleFindComparisons, verifyingStaffId]);
+
     return (
         <>
             {error && (
@@ -274,7 +277,8 @@ export default function StaffPageContent() {
                     </Space>
                 }
             >
-                <StaffTable
+                <EntityTable<StaffListViewEnriched>
+                    columns={staffColumns}
                     data={data}
                     loading={loading}
                     currentPage={currentPage}
@@ -284,9 +288,11 @@ export default function StaffPageContent() {
                     visibleColumns={visibleColumns}
                     onTableChange={handleTableChange}
                     onRowClick={handleRowClick}
-                    onVerifyClick={handleVerifyClick}
-                    onFindComparisons={handleFindComparisons}
-                    verifyingStaffId={verifyingStaffId}
+                    rowClassName={(record) => {
+                        if (record.archived === 1) return 'bg-gray-50 opacity-60';
+                        return 'cursor-pointer hover:bg-gray-50';
+                    }}
+                    scroll={{x: 1000}}
                 />
             </TableContainer>
 

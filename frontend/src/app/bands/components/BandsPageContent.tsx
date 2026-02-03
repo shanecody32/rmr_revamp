@@ -3,17 +3,19 @@
 import {PlusOutlined} from '@ant-design/icons';
 import {App, Button, Space} from 'antd';
 import {useRouter} from 'next/navigation';
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
 import DetailDrawer from '@/components/common/data/DetailView/DetailDrawer';
+import EntityTable from '@/components/common/data/tables/EntityTable';
 import TableContainer from '@/components/common/data/tables/TableContainer';
 import TableToolbar from '@/components/common/data/tables/TableToolbar';
 import ErrorAlert from '@/components/common/feedback/ErrorAlert';
-import {columnOptions} from '@/app/bands/components/bandColumns';
+import SimilarEntitiesModal, {type SearchSettings, loadSavedSettings} from '@/components/common/modals/SimilarEntitiesModal';
+import {columnOptions, getBandColumns} from '@/app/bands/components/bandColumns';
 import {useColumnVisibility} from '@/hooks/useColumnVisibility';
 import {useDetailDrawer} from '@/hooks/useDetailDrawer';
 import {useTableData} from '@/hooks/useTableData';
-import {fetchBandDetail, fetchBandsList, fetchSimilarBands, updateBand} from '@/lib/api/bands';
+import {fetchBandDetail, fetchBands, fetchBandsList, fetchSimilarBands, updateBand, type SimilarBand} from '@/lib/api/bands';
 import {bandFilterOptions} from '@/lib/config/filterOptions';
 import {handleApiError} from '@/lib/errors';
 import type {BandListViewEnriched, BandResponse, BandWithDiscographyResponse} from '@/types/api';
@@ -22,9 +24,8 @@ import type {ApiError} from '@/types/error';
 import AddBandModal from './AddBandModal';
 import AdvancedSearchDrawer from './AdvancedSearchDrawer';
 import BandMergeComparison from './BandMergeComparison';
-import BandsTable from './BandsTable';
-import SimilarBandsModal, {type SearchSettings} from './SimilarBandsModal';
 
+const SETTINGS_KEY = 'similarity-search-settings';
 
 export default function BandsPageContent() {
     const mounted = useRef(true);
@@ -39,31 +40,14 @@ export default function BandsPageContent() {
     const [updateError, setUpdateError] = useState<ApiError | null>(null);
 
     // States for band verification and merge process
-    const [similarBands, setSimilarBands] = useState<any[]>([]);
+    const [similarBands, setSimilarBands] = useState<SimilarBand[]>([]);
     const [bandToVerify, setBandToVerify] = useState<BandListViewEnriched | null>(null);
-    const [selectedBandsToMerge, setSelectedBandsToMerge] = useState<any[]>([]);
+    const [selectedBandsToMerge, setSelectedBandsToMerge] = useState<SimilarBand[]>([]);
     const [loadingSimilarBands, setLoadingSimilarBands] = useState(false);
     const [verifyingBandId, setVerifyingBandId] = useState<number | null>(null);
-    const [searchSettings, setSearchSettings] = useState<SearchSettings>(() => {
-        // Load saved settings from localStorage
-        const defaults: SearchSettings = {
-            jw_weight: 0.6,
-            dice_weight: 0.4,
-            min_similarity: 70,
-            restrict_to_parent: false,
-            limit: 20,
-        };
-        if (typeof window === 'undefined') return defaults;
-        try {
-            const saved = localStorage.getItem('similarity-search-settings');
-            if (saved) {
-                return { ...defaults, ...JSON.parse(saved) };
-            }
-        } catch (e) {
-            console.error('Error loading saved settings:', e);
-        }
-        return defaults;
-    });
+    const [searchSettings, setSearchSettings] = useState<SearchSettings>(() =>
+        loadSavedSettings(SETTINGS_KEY)
+    );
 
     const {
         loading,
@@ -133,12 +117,10 @@ export default function BandsPageContent() {
             const updatedBand = await updateBand(selectedItem.id, values);
 
             if (mounted.current) {
-                // Update the selected item in the drawer
                 setSelectedItem({
                     ...selectedItem,
                     ...updatedBand
                 });
-                // Refresh the table data to show updated information
                 refresh();
                 message.success('Band updated successfully');
             }
@@ -154,7 +136,6 @@ export default function BandsPageContent() {
     const handleAdvancedSearch = (filters: Record<string, any>) => {
         if (!mounted.current) return;
 
-        // Load data with all filters
         loadData(1, undefined, undefined, filters);
         setModals(prev => ({...prev, advancedSearch: false}));
     };
@@ -186,7 +167,6 @@ export default function BandsPageContent() {
                 console.error('Error restoring page state:', e);
             }
         }
-    // Only run once on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -199,7 +179,6 @@ export default function BandsPageContent() {
             setVerifyingBandId(band.id);
             setBandToVerify(band);
 
-            // Search for similar bands with current settings
             const similar = await fetchSimilarBands({
                 search_term: band.name,
                 existing_id: band.id,
@@ -210,22 +189,18 @@ export default function BandsPageContent() {
                 limit: searchSettings.limit,
             });
 
-            setSimilarBands(similar.filter(b => b.id !== band.id)); // Filter out the band itself
+            setSimilarBands(similar.filter(b => b.id !== band.id));
 
-            // If forceModal is true, always show modal regardless of results
-            // Otherwise, if no similar bands found, go directly to edit page
-            if (!forceModal && similar.length <= 1) { // 1 because the band itself might be in the results
+            if (!forceModal && similar.length <= 1) {
                 router.push(`/bands/edit/${band.id}/${band.slug}`);
                 return;
             }
 
-            // Show the similar bands modal
             setModals(prev => ({...prev, similarBands: true}));
 
         } catch (error) {
             console.error('Error fetching similar bands:', error);
             message.error('Failed to find similar bands');
-            // If force modal, still show the modal even with empty results
             if (forceModal) {
                 setSimilarBands([]);
                 setModals(prev => ({...prev, similarBands: true}));
@@ -242,9 +217,9 @@ export default function BandsPageContent() {
     }, [handleVerifyClick]);
 
     // Handle selecting a band from similar bands modal
-    const handleSelectSimilarBand = (band: any) => {
+    const handleSelectSimilarBand = (band: SimilarBand) => {
         if (!mounted.current) return;
-        router.push(`/bands/view/${band.id}/${band.slug}`);
+        router.push(`/bands/view/${band.id}/${band.name}`);
         setModals(prev => ({...prev, similarBands: false}));
     };
 
@@ -256,7 +231,7 @@ export default function BandsPageContent() {
     };
 
     // Handle selecting bands to merge
-    const handleSelectBandsToMerge = (selectedBands: any[]) => {
+    const handleSelectBandsToMerge = (selectedBands: SimilarBand[]) => {
         if (!mounted.current || !bandToVerify) return;
 
         setSelectedBandsToMerge(selectedBands);
@@ -296,9 +271,15 @@ export default function BandsPageContent() {
 
         message.success('Bands merged successfully');
         setModals(prev => ({...prev, merge: false}));
-        refresh(); // Refresh the bands list
+        refresh();
         router.push(`/bands/edit/${mergedBand.id}/${mergedBand.slug}`);
     };
+
+    const bandColumns = useMemo(() => getBandColumns({
+        onVerifyClick: handleVerifyClick,
+        onFindComparisons: handleFindComparisons,
+        verifyingBandId,
+    }), [handleVerifyClick, handleFindComparisons, verifyingBandId]);
 
     return (
         <>
@@ -344,7 +325,8 @@ export default function BandsPageContent() {
                     </Space>
                 }
             >
-                <BandsTable
+                <EntityTable<BandListViewEnriched>
+                    columns={bandColumns}
                     data={data}
                     loading={loading}
                     currentPage={currentPage}
@@ -354,9 +336,6 @@ export default function BandsPageContent() {
                     visibleColumns={visibleColumns}
                     onTableChange={handleTableChange}
                     onRowClick={(record) => showDrawer(record as unknown as BandWithDiscographyResponse)}
-                    onVerifyClick={handleVerifyClick}
-                    onFindComparisons={handleFindComparisons}
-                    verifyingBandId={verifyingBandId}
                 />
             </TableContainer>
 
@@ -399,23 +378,36 @@ export default function BandsPageContent() {
                 filters={filters}
             />
 
-            {/* Modal for showing similar bands */}
-            <SimilarBandsModal
+            <SimilarEntitiesModal<SimilarBand>
                 open={modals.similarBands}
                 onCancel={() => setModals(prev => ({...prev, similarBands: false}))}
                 onSelect={handleSelectSimilarBand}
                 onProceed={handleProceedWithoutMerge}
                 onMergeSelected={handleSelectBandsToMerge}
                 onRerunSearch={handleRerunSearch}
-                similarBands={similarBands}
-                newBandName={bandToVerify?.name || ''}
+                similarEntities={similarBands}
+                entityName="band"
+                searchedName={bandToVerify?.name || ''}
                 loading={loadingSimilarBands}
                 mode="select-multiple"
                 searchSettings={searchSettings}
-                excludeBandId={bandToVerify?.id}
+                settingsStorageKey={SETTINGS_KEY}
+                manualSearch={{
+                    searchEntities: async (query) => {
+                        const result = await fetchBands({name: query, name_filter_type: 'contains', page: 1, page_size: 20});
+                        return result.data;
+                    },
+                    mapToSimilar: (band) => ({
+                        id: band.id,
+                        name: band.name,
+                        similarity_score: 0,
+                        verified: band.verified ?? false,
+                        approved: band.approved ?? false,
+                    } as SimilarBand),
+                    excludeId: bandToVerify?.id,
+                }}
             />
 
-            {/* Modal for comparing and merging bands */}
             {bandToVerify && (
                 <BandMergeComparison
                     open={modals.merge}

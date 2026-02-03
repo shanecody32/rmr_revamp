@@ -121,3 +121,13 @@ export async function getEntityMatches(entityType: ScanEntityType, entityId: num
     const response = await api.get(`/duplicate-scan/${entityType}/entities/${entityId}/matches`);
     return response.data;
 }
+
+export interface EntityPendingCount {
+    entity_type: string;
+    pending_count: number;
+}
+
+export async function getDuplicateSummary(): Promise<EntityPendingCount[]> {
+    const response = await api.get<EntityPendingCount[]>('/duplicate-scan/summary');
+    return response.data;
+}

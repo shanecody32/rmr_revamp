@@ -2,6 +2,7 @@ use sea_orm::DatabaseConnection;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tokio_util::sync::CancellationToken;
 use serde::Serialize;
 use utoipa::ToSchema;
 use chrono::{DateTime, Utc};
@@ -47,6 +48,8 @@ pub struct AppState {
     pub album_genre_update_job_state: Arc<RwLock<TaskJobState>>,
     /// Per-entity-type scan running flags (keyed by entity_type string e.g. "bands", "albums")
     pub duplicate_scans_running: Arc<RwLock<HashMap<String, bool>>>,
+    /// Per-entity-type cancellation tokens for background scans
+    pub duplicate_scan_tokens: Arc<RwLock<HashMap<String, CancellationToken>>>,
     pub static_config: StaticFileConfig,
     pub http_client: reqwest::Client,
 }

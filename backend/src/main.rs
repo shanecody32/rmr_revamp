@@ -31,6 +31,7 @@ async fn main() {
         backfill_job_state: std::sync::Arc::new(tokio::sync::RwLock::new(BackfillJobState::default())),
         album_genre_update_job_state: std::sync::Arc::new(tokio::sync::RwLock::new(TaskJobState::default())),
         duplicate_scans_running: std::sync::Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+        duplicate_scan_tokens: std::sync::Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         static_config,
         http_client,
     };

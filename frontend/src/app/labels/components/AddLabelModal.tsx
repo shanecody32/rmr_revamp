@@ -5,7 +5,7 @@ import {useState} from 'react';
 
 import {createLabel, fetchSimilarLabels, type SimilarLabel} from '@/lib/api/labels';
 import type {LabelResponse} from '@/types/api/labels';
-import SimilarLabelsModal, {type SearchSettings} from './SimilarLabelsModal';
+import SimilarEntitiesModal, {type SearchSettings} from '@/components/common/modals/SimilarEntitiesModal';
 
 interface AddLabelModalProps {
     open: boolean;
@@ -24,6 +24,7 @@ export default function AddLabelModal({open, onCancel, onSuccess}: AddLabelModal
         jw_weight: 0.6,
         dice_weight: 0.4,
         min_similarity: 70,
+        restrict_to_parent: false,
         limit: 20,
     });
 
@@ -135,15 +136,16 @@ export default function AddLabelModal({open, onCancel, onSuccess}: AddLabelModal
                 </Form>
             </Modal>
 
-            <SimilarLabelsModal
+            <SimilarEntitiesModal<SimilarLabel>
                 open={isSimilarModalOpen}
                 onCancel={() => setIsSimilarModalOpen(false)}
                 onSelect={handleSelectSimilarLabel}
                 onProceed={handleProceedWithCreate}
                 onMergeSelected={() => {}}
                 onRerunSearch={handleRerunSearch}
-                similarLabels={similarLabels}
-                newLabelName={pendingName}
+                similarEntities={similarLabels}
+                entityName="label"
+                searchedName={pendingName}
                 loading={loading}
                 mode="select-one"
                 searchSettings={searchSettings}

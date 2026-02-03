@@ -9,5 +9,6 @@ pub mod label_service;
 pub mod staff_service;
 pub mod auth_service;
 pub mod duplicate_scan_service;
+pub mod duplicate_scan_entity;
 pub mod action_log_service;
 pub mod types;

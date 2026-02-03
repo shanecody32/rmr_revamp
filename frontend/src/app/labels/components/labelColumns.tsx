@@ -1,13 +1,15 @@
 'use client'
 
-import {CheckCircleOutlined, DownOutlined, EditOutlined, EyeOutlined, LoadingOutlined, SearchOutlined} from '@ant-design/icons';
-import {Badge, Button, Dropdown, Space} from 'antd';
+import {Badge} from 'antd';
 import type {ColumnsType} from 'antd/es/table';
-import type {MenuProps} from 'antd';
-import Link from 'next/link';
 
+import {
+    getEntityActionColumn,
+    getIdColumn,
+    getCreatedAtColumn,
+    getUpdatedAtColumn,
+} from '@/components/common/columns/entityColumns';
 import type {LabelListItem} from '@/types/api/labels';
-import {formatDate} from '@/lib/utils';
 
 export const columnOptions = [
     {key: 'actions', label: 'Actions', required: true},
@@ -29,83 +31,15 @@ export const getLabelColumns = ({
     onFindComparisons,
     verifyingLabelId,
 }: LabelColumnProps): ColumnsType<LabelListItem> => [
-    {
-        key: 'actions',
-        title: 'Actions',
-        fixed: 'left',
-        width: 250,
-        render: (_, record) => {
-            const verifyMenuItems: MenuProps['items'] = [
-                {
-                    key: 'find-comparisons',
-                    icon: <SearchOutlined />,
-                    label: 'Find Comparisons',
-                    onClick: (e) => {
-                        e.domEvent.stopPropagation();
-                        if (onFindComparisons) onFindComparisons(record);
-                    }
-                },
-            ];
-
-            return (
-                <Space>
-                    <Link
-                        href={`/labels/view/${record.id}/${record.slug}`}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <Button
-                            type="link"
-                            icon={<EyeOutlined/>}
-                            size="small"
-                        >
-                            View
-                        </Button>
-                    </Link>
-                    <Link
-                        href={`/labels/edit/${record.id}/${record.slug}`}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <Button
-                            type="link"
-                            icon={<EditOutlined/>}
-                            size="small"
-                        >
-                            Edit
-                        </Button>
-                    </Link>
-                    <Space.Compact>
-                        <Button
-                            type="link"
-                            size="small"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                if (onVerifyClick && verifyingLabelId !== record.id) onVerifyClick(record);
-                            }}
-                            disabled={verifyingLabelId === record.id}
-                        >
-                            {verifyingLabelId === record.id ? <LoadingOutlined /> : <CheckCircleOutlined />} Verify
-                        </Button>
-                        <Dropdown menu={{ items: verifyMenuItems }} trigger={['click']}>
-                            <Button
-                                type="link"
-                                size="small"
-                                icon={<DownOutlined />}
-                                onClick={(e) => e.stopPropagation()}
-                            />
-                        </Dropdown>
-                    </Space.Compact>
-                </Space>
-            );
-        },
-    },
-    {
-        key: 'id',
-        title: 'ID',
-        dataIndex: 'id',
-        sorter: true,
-        width: 100,
-        fixed: 'left',
-    },
+    getEntityActionColumn<LabelListItem>({
+        routePrefix: 'labels',
+        getId: (r) => r.id,
+        getSlug: (r) => r.slug,
+        onVerifyClick,
+        onFindComparisons,
+        verifyingId: verifyingLabelId,
+    }),
+    getIdColumn<LabelListItem>(),
     {
         key: 'name',
         title: 'Name',
@@ -125,18 +59,6 @@ export const getLabelColumns = ({
             <Badge count={count} showZero style={{backgroundColor: count > 0 ? '#1890ff' : '#d9d9d9'}} />
         ),
     },
-    {
-        key: 'created_at',
-        title: 'Created At',
-        dataIndex: 'created_at',
-        sorter: true,
-        render: formatDate,
-    },
-    {
-        key: 'updated_at',
-        title: 'Updated At',
-        dataIndex: 'updated_at',
-        sorter: true,
-        render: formatDate,
-    },
+    getCreatedAtColumn<LabelListItem>(),
+    getUpdatedAtColumn<LabelListItem>(),
 ];

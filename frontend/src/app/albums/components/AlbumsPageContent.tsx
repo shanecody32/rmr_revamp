@@ -1,12 +1,11 @@
 'use client'
 
 import {PlusOutlined} from '@ant-design/icons';
-import {Button, Space, Table} from 'antd';
-import type {TablePaginationConfig} from 'antd/es/table';
-import type {SorterResult} from 'antd/es/table/interface';
-import {useCallback, useMemo, useState} from 'react';
+import {Button, Space} from 'antd';
+import {useMemo, useState} from 'react';
 
 import DetailDrawer from '@/components/common/data/DetailView/DetailDrawer';
+import EntityTable from '@/components/common/data/tables/EntityTable';
 import TableContainer from '@/components/common/data/tables/TableContainer';
 import TableToolbar from '@/components/common/data/tables/TableToolbar';
 import ErrorAlert from '@/components/common/feedback/ErrorAlert';
@@ -78,11 +77,6 @@ export default function AlbumsPageContent() {
         fetchData: fetchAlbums,
     });
 
-
-    const visibleAlbumColumns = albumColumns.filter(col =>
-        visibleColumns.includes(col.key as string)
-    );
-
     return (
         <>
             {error && (
@@ -119,40 +113,18 @@ export default function AlbumsPageContent() {
                     </Space>
                 }
             >
-                <Table
-                    columns={visibleAlbumColumns}
-                    dataSource={data}
+                <EntityTable<AlbumResponse>
+                    columns={albumColumns}
+                    data={data}
                     loading={loading}
-                    rowKey="id"
-                    pagination={{
-                        current: currentPage,
-                        pageSize: pageSize,
-                        total: total,
-                        showSizeChanger: true,
-                        showQuickJumper: true,
-                        showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} items`,
-                        pageSizeOptions: ['10', '25', '50', '100']
-                    }}
-                    onChange={handleTableChange}
-                    onRow={(record) => ({
-                        onClick: () => showDrawer(record)
-                    })}
-                    scroll={{ x: 'max-content' }}
-                    size="middle"
+                    currentPage={currentPage}
+                    pageSize={pageSize}
+                    total={total}
+                    sortParams={sortParams}
+                    visibleColumns={visibleColumns}
+                    onTableChange={handleTableChange}
+                    onRowClick={showDrawer}
                 />
-                <style jsx global>{`
-                    .ant-table-row {
-                        cursor: pointer;
-                    }
-
-                    .ant-table-row:hover {
-                        background: #fafafa;
-                    }
-
-                    .ant-table-cell {
-                        padding: 12px 16px !important;
-                    }
-                `}</style>
             </TableContainer>
 
             <AddAlbumModal
