@@ -29,6 +29,12 @@ use serde::Serialize;
 use utoipa::ToSchema;
 use std::collections::{HashMap, HashSet};
 
+// Type aliases for complex HashMap types used in playlist aggregation
+type PlaylistKey = (Option<u32>, Option<u32>, Option<u32>);
+type PlaylistValue = (u32, i32, i32);
+type ArchiveKey = (Option<u32>, Option<u32>, Option<u32>, Option<chrono::NaiveDate>);
+type ArchiveValue = (u32, i32, i32);
+
 pub struct RadioStationService;
 
 #[derive(Debug, Deserialize, IntoParams)]
@@ -99,8 +105,8 @@ impl RadioStationService {
 
         let mut query = RadioStation::find();
 
-        if let Some(name) = params.name {
-            if !name.is_empty() {
+        if let Some(name) = params.name
+            && !name.is_empty() {
                 match params.name_filter_type.as_deref() {
                     Some("starts_with") => {
                         query = query.filter(crate::models::radio_stations::Column::Name.starts_with(&name));
@@ -116,13 +122,11 @@ impl RadioStationService {
                     }
                 }
             }
-        }
 
-        if let Some(r_type) = params.r#type {
-            if !r_type.is_empty() {
+        if let Some(r_type) = params.r#type
+            && !r_type.is_empty() {
                 query = query.filter(crate::models::radio_stations::Column::Type.eq(r_type));
             }
-        }
 
         if let Some(verified) = params.verified {
             query = query.filter(crate::models::radio_stations::Column::Verified.eq(if verified { 1 } else { 0 }));
@@ -184,8 +188,8 @@ impl RadioStationService {
     ) -> Result<Vec<SimilarResult<RadioStationModel>>, DbErr> {
         let mut query = RadioStationAlias::find();
 
-        if let Some(true) = params.restrict_to_parent {
-            if params.country_id.is_some() || params.state_id.is_some() || params.city_id.is_some() {
+        if let Some(true) = params.restrict_to_parent
+            && (params.country_id.is_some() || params.state_id.is_some() || params.city_id.is_some()) {
                 query = query.join(JoinType::InnerJoin, RadioStationAlias::belongs_to(RadioStation).from(RadioStationAliasColumn::RadioStationId).to(crate::models::radio_stations::Column::Id).into())
                              .join(JoinType::InnerJoin, crate::models::radio_stations::Relation::RadioAddresses.def());
                 if let Some(country_id) = params.country_id {
@@ -198,7 +202,6 @@ impl RadioStationService {
                     query = query.filter(crate::models::radio_addresses::Column::CityId.eq(city_id));
                 }
             }
-        }
 
         let results: Vec<SimilarResult<crate::models::radio_station_aliases::Model>> = find_similar_pipeline(
             db,
@@ -364,14 +367,13 @@ impl RadioStationService {
                             .await?;
 
                         for email_record in emails {
-                            if let Some(ref email_val) = email_record.email {
-                                if existing_emails.contains(email_val) {
+                            if let Some(ref email_val) = email_record.email
+                                && existing_emails.contains(email_val) {
                                     let active: crate::models::radio_emails::ActiveModel = email_record.into();
                                     active.delete(txn).await?;
                                     stats.emails_deduped += 1;
                                     continue;
                                 }
-                            }
                             let mut active: crate::models::radio_emails::ActiveModel = email_record.into();
                             active.radio_station_id = Set(Some(target_id));
                             active.update(txn).await?;
@@ -397,14 +399,13 @@ impl RadioStationService {
                             .await?;
 
                         for img in images {
-                            if let Some(ref path) = img.path {
-                                if existing_paths.contains(path) {
+                            if let Some(ref path) = img.path
+                                && existing_paths.contains(path) {
                                     let active: crate::models::radio_images::ActiveModel = img.into();
                                     active.delete(txn).await?;
                                     stats.images_deduped += 1;
                                     continue;
                                 }
-                            }
                             let mut active: crate::models::radio_images::ActiveModel = img.into();
                             active.radio_station_id = Set(Some(target_id));
                             active.update(txn).await?;
@@ -430,14 +431,13 @@ impl RadioStationService {
                             .await?;
 
                         for lnk in links {
-                            if let Some(ref url) = lnk.link {
-                                if existing_links.contains(url) {
+                            if let Some(ref url) = lnk.link
+                                && existing_links.contains(url) {
                                     let active: crate::models::radio_links::ActiveModel = lnk.into();
                                     active.delete(txn).await?;
                                     stats.links_deduped += 1;
                                     continue;
                                 }
-                            }
                             let mut active: crate::models::radio_links::ActiveModel = lnk.into();
                             active.radio_station_id = Set(Some(target_id));
                             active.update(txn).await?;
@@ -463,14 +463,13 @@ impl RadioStationService {
                             .await?;
 
                         for phone in phones {
-                            if let Some(ref number) = phone.phone {
-                                if existing_phones.contains(number) {
+                            if let Some(ref number) = phone.phone
+                                && existing_phones.contains(number) {
                                     let active: crate::models::radio_phone_numbers::ActiveModel = phone.into();
                                     active.delete(txn).await?;
                                     stats.phone_numbers_deduped += 1;
                                     continue;
                                 }
-                            }
                             let mut active: crate::models::radio_phone_numbers::ActiveModel = phone.into();
                             active.radio_station_id = Set(Some(target_id));
                             active.update(txn).await?;
@@ -635,13 +634,12 @@ impl RadioStationService {
                             .await?;
 
                         for sg in sub_genres {
-                            if let Some(sg_id) = sg.sub_genre_id {
-                                if existing_sub_genres.contains(&sg_id) {
+                            if let Some(sg_id) = sg.sub_genre_id
+                                && existing_sub_genres.contains(&sg_id) {
                                     let active: crate::models::radio_stations_sub_genres::ActiveModel = sg.into();
                                     active.delete(txn).await?;
                                     continue;
                                 }
-                            }
                             let mut active: crate::models::radio_stations_sub_genres::ActiveModel = sg.into();
                             active.radio_station_id = Set(Some(target_id));
                             active.update(txn).await?;
@@ -667,14 +665,13 @@ impl RadioStationService {
                             .await?;
 
                         for usr in users {
-                            if let Some(uid) = usr.user_id {
-                                if existing_users.contains(&uid) {
+                            if let Some(uid) = usr.user_id
+                                && existing_users.contains(&uid) {
                                     let active: crate::models::radio_stations_users::ActiveModel = usr.into();
                                     active.delete(txn).await?;
                                     stats.users_deduped += 1;
                                     continue;
                                 }
-                            }
                             let mut active: crate::models::radio_stations_users::ActiveModel = usr.into();
                             active.radio_station_id = Set(Some(target_id));
                             active.update(txn).await?;
@@ -691,7 +688,7 @@ impl RadioStationService {
                         .await?;
 
                     // Build map: (band_id, album_id, song_id) -> (id, spins, subtract_spins)
-                    let mut target_map: HashMap<(Option<u32>, Option<u32>, Option<u32>), (u32, i32, i32)> = HashMap::new();
+                    let mut target_map: HashMap<PlaylistKey, PlaylistValue> = HashMap::new();
                     for pl in &target_playlists {
                         target_map.insert(
                             (pl.band_id, pl.album_id, pl.song_id),
@@ -737,7 +734,7 @@ impl RadioStationService {
                         .all(txn)
                         .await?;
 
-                    let mut target_map: HashMap<(Option<u32>, Option<u32>, Option<u32>, Option<chrono::NaiveDate>), (u32, i32, i32)> = HashMap::new();
+                    let mut target_map: HashMap<ArchiveKey, ArchiveValue> = HashMap::new();
                     for arch in &target_archives {
                         target_map.insert(
                             (arch.band_id, arch.album_id, arch.song_id, arch.week_ending),

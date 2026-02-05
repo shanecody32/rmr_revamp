@@ -12,7 +12,7 @@ use tokio_stream::StreamExt;
 use tokio_stream::wrappers::IntervalStream;
 use crate::job_state::{AppState, BackfillJobState, TaskJobState};
 use crate::utils::similarity::backfill_aliases;
-use crate::services::album_service::AlbumService;
+use crate::services::AlbumService;
 use crate::services::duplicate_scan_service::{DuplicateScanService, ScanStateResponse};
 
 pub fn router() -> Router<AppState> {

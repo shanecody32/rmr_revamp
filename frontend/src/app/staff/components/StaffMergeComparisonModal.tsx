@@ -18,7 +18,7 @@ import {
 import {useState} from 'react';
 
 import {mergeStaff} from '@/lib/api/staff';
-import type {StaffDetailView, MergeStaffRequest, StaffMergeResult} from '@/types/api/staff';
+import type {StaffDetailView, MergeStaffRequest, StaffMergeResult, StaffResponse} from '@/types/api/staff';
 import {getStaffDisplayName} from '@/types/api/staff';
 
 const {Text} = Typography;
@@ -28,7 +28,7 @@ interface StaffMergeComparisonModalProps {
     open: boolean;
     onCancel: () => void;
     staffMembers: StaffDetailView[];
-    onMergeComplete: () => void;
+    onMergeComplete: (mergedStaff: StaffResponse) => void;
 }
 
 export default function StaffMergeComparisonModal({
@@ -308,7 +308,9 @@ export default function StaffMergeComparisonModal({
     };
 
     const handleDone = () => {
-        onMergeComplete();
+        if (mergeResult) {
+            onMergeComplete(mergeResult.merged_staff);
+        }
     };
 
     return (

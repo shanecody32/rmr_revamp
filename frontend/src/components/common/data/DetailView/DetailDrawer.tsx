@@ -20,6 +20,14 @@ import DiscographyTab from './Tabs/DiscographyTab';
 import ExternalIdsTab from './Tabs/ExternalIdsTab';
 import SocialLinksTab from './Tabs/SocialLinksTab';
 
+// Extract styles to constant to prevent recreation on each render
+const DRAWER_STYLES = {
+    body: {
+        padding: 0,
+        height: 'calc(100% - 55px)',
+        overflow: 'hidden' as const,
+    },
+};
 
 interface DetailDrawerProps<T extends BaseEntity> {
     open: boolean;
@@ -148,13 +156,7 @@ export default function DetailDrawer<T extends BaseEntity>({
                 open={open}
                 destroyOnClose
                 className="details-drawer"
-                styles={{
-                    body: {
-                        padding: 0,
-                        height: 'calc(100% - 55px)',
-                        overflow: 'hidden'
-                    }
-                }}
+                styles={DRAWER_STYLES}
             >
                 <Tabs
                     defaultActiveKey="basic"

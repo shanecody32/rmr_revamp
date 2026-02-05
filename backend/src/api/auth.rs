@@ -7,6 +7,7 @@ use axum::{
 };
 use crate::services::auth_service::{AuthService, LoginRequest, LoginResponse};
 use crate::models::users::Model as User;
+use crate::views::ApiError;
 use crate::job_state::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -29,7 +30,7 @@ pub(crate) async fn login(State(state): State<AppState>, Json(req): Json<LoginRe
     match AuthService::login(&state.db, req).await {
         Ok(response) => (StatusCode::OK, Json(response)).into_response(),
         Err(sea_orm::DbErr::RecordNotFound(msg)) => (StatusCode::NOT_FOUND, msg).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -46,6 +47,6 @@ pub(crate) async fn get_current_user(State(state): State<AppState>) -> impl Into
     match AuthService::get_current_user(&state.db).await {
         Ok(Some(user)) => (StatusCode::OK, Json(user)).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, "User not found").into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }

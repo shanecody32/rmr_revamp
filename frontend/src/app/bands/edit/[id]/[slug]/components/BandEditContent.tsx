@@ -502,7 +502,7 @@ export default function BandEditContent({id, slug}: BandEditContentProps) {
     ];
 
     return (
-        <div className="max-w-7xl mx-auto">
+        <div>
                 <Form
                     form={form}
                     layout="vertical"

@@ -15,6 +15,7 @@ use serde::Serialize;
 
 pub struct ActionLogService;
 
+#[allow(clippy::too_many_arguments)]
 impl ActionLogService {
     /// Record an action in the action log.
     ///

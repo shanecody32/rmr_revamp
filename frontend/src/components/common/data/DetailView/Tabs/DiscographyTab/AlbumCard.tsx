@@ -1,6 +1,7 @@
 'use client'
 
 import {Card, Space, Tag} from 'antd';
+import {memo} from 'react';
 
 import {getAlbumDisplayImageUrl} from '@/lib/utils/media';
 import type {AlbumWithRelationsResponse} from '@/types/api/albums';
@@ -14,7 +15,7 @@ interface AlbumCardProps {
     album: AlbumWithRelationsResponse;
 }
 
-export default function AlbumCard({album}: AlbumCardProps) {
+const AlbumCard = memo(function AlbumCard({album}: AlbumCardProps) {
     return (
         <Card
             key={`album-${album.id}`}
@@ -59,4 +60,6 @@ export default function AlbumCard({album}: AlbumCardProps) {
             </div>
         </Card>
     );
-}
+});
+
+export default AlbumCard;

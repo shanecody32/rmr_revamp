@@ -39,11 +39,10 @@ impl StaffSummary {
 
     /// Get the display name for this staff member.
     pub fn display_name(&self) -> String {
-        if let Some(ref on_air) = self.on_air_name {
-            if !on_air.is_empty() {
+        if let Some(ref on_air) = self.on_air_name
+            && !on_air.is_empty() {
                 return on_air.clone();
             }
-        }
 
         let first = self.first_name.as_deref().unwrap_or("");
         let last = self.last_name.as_deref().unwrap_or("");

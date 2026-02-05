@@ -242,7 +242,7 @@ impl DuplicateScanService {
             updated_at: Set(now),
             ..Default::default()
         };
-        Ok(new_state.insert(db).await?)
+        new_state.insert(db).await
     }
 
     fn build_scan_state_response(
@@ -471,6 +471,7 @@ impl DuplicateScanService {
     }
 
     /// Generic batch processor that works with any DuplicateScanEntity implementation.
+    #[allow(clippy::too_many_arguments)]
     async fn process_batch_for<E: DuplicateScanEntity>(
         db: &DatabaseConnection,
         state: &crate::models::duplicate_scan_state::Model,

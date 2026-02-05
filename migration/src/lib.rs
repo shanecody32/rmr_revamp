@@ -14,6 +14,11 @@ mod m20260201_create_staff_member_duplicate_candidates;
 mod m20260201_create_label_duplicate_candidates;
 mod m20260131_fix_null_junction_ids;
 mod m20260201_add_entity_type_to_scan_state;
+mod m20260203_create_band_relationships;
+mod m20260203_create_song_artists;
+mod m20260203_add_entity_type_fields;
+mod m20260203_add_entity_status_fields;
+mod m20260204_add_similarity_search_indexes;
 
 pub struct Migrator;
 
@@ -35,6 +40,11 @@ impl MigratorTrait for Migrator {
             Box::new(m20260201_create_label_duplicate_candidates::Migration),
             Box::new(m20260131_fix_null_junction_ids::Migration),
             Box::new(m20260201_add_entity_type_to_scan_state::Migration),
+            Box::new(m20260203_create_band_relationships::Migration),
+            Box::new(m20260203_create_song_artists::Migration),
+            Box::new(m20260203_add_entity_type_fields::Migration),
+            Box::new(m20260203_add_entity_status_fields::Migration),
+            Box::new(m20260204_add_similarity_search_indexes::Migration),
         ]
     }
 }

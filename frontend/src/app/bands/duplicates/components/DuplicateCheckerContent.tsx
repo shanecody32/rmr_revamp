@@ -289,10 +289,10 @@ export default function DuplicateCheckerContent() {
         setIsSimilarBandsModalOpen(false);
     };
 
-    // Handle proceeding without merging
+    // Handle proceeding without merging - go to validation page
     const handleProceedWithoutMerge = () => {
         if (!bandToReview) return;
-        router.push(`/bands/edit/${bandToReview.id}/${bandToReview.slug}?from=duplicates`);
+        router.push(`/system/validation/band/${bandToReview.id}/${bandToReview.slug}?from=duplicates`);
         setIsSimilarBandsModalOpen(false);
     };
 
@@ -337,12 +337,12 @@ export default function DuplicateCheckerContent() {
         }
     };
 
-    // Handle merge completion
+    // Handle merge completion - go to validation page
     const handleMergeComplete = (mergedBand: BandResponse) => {
         message.success('Bands merged successfully');
         setIsMergeModalOpen(false);
         loadResults(); // Refresh the list
-        router.push(`/bands/edit/${mergedBand.id}/${mergedBand.slug}?from=duplicates`);
+        router.push(`/system/validation/band/${mergedBand.id}/${mergedBand.slug}?from=duplicates`);
     };
 
     // Table columns for grouped results

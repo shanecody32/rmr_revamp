@@ -127,7 +127,7 @@ export default function StaffPageContent() {
         router.push(`/staff/view/${record.id}/${slug}`);
     };
 
-    const handleVerifyClick = async (record: StaffListViewEnriched) => {
+    const handleVerifyClick = async (record: StaffListViewEnriched, forceModal = false) => {
         setStaffToVerify(record);
         setVerifyingStaffId(record.id);
         setLoadingSimilarStaff(true);
@@ -146,13 +146,27 @@ export default function StaffPageContent() {
             };
 
             const results = await fetchSimilarStaff(params);
+            const filtered = results.filter((s: any) => s.id !== record.id);
+
             if (mounted.current) {
-                setSimilarStaff(results);
+                setSimilarStaff(filtered);
+
+                // If no similar staff found and not forced, go directly to validation page
+                if (!forceModal && filtered.length === 0) {
+                    const slug = getStaffSlug(record);
+                    router.push(`/system/validation/staff/${record.id}/${slug}`);
+                    return;
+                }
+
                 setIsSimilarStaffModalOpen(true);
             }
         } catch (error) {
             console.error('Error fetching similar staff:', error);
             message.error('Failed to search for similar staff members');
+            if (forceModal && mounted.current) {
+                setSimilarStaff([]);
+                setIsSimilarStaffModalOpen(true);
+            }
         } finally {
             if (mounted.current) {
                 setLoadingSimilarStaff(false);
@@ -162,7 +176,7 @@ export default function StaffPageContent() {
     };
 
     const handleFindComparisons = async (record: StaffListViewEnriched) => {
-        await handleVerifyClick(record);
+        await handleVerifyClick(record, true);
     };
 
     const handleSimilarStaffModalClose = () => {
@@ -184,6 +198,12 @@ export default function StaffPageContent() {
         setIsMergeModalOpen(true);
     };
 
+    const getStaffSlug = (staff: { on_air_name?: string | null; first_name?: string | null; last_name?: string | null }) => {
+        return staff.on_air_name
+            ? staff.on_air_name.toLowerCase().replace(/\s+/g, '-')
+            : `${staff.first_name || ''}-${staff.last_name || ''}`.toLowerCase().replace(/\s+/g, '-');
+    };
+
     const handleVerifyOnly = async () => {
         if (!staffToVerify) return;
 
@@ -192,17 +212,23 @@ export default function StaffPageContent() {
             message.success('Staff member verified successfully');
             refresh();
             handleSimilarStaffModalClose();
+            // Navigate to validation page
+            const slug = getStaffSlug(staffToVerify);
+            router.push(`/system/validation/staff/${staffToVerify.id}/${slug}`);
         } catch (error) {
             message.error('Failed to verify staff member');
         }
     };
 
-    const handleMergeComplete = () => {
+    const handleMergeComplete = (mergedStaff: { id: number; on_air_name?: string | null; first_name?: string | null; last_name?: string | null }) => {
         setIsMergeModalOpen(false);
         setSelectedStaffToMerge([]);
         setStaffToVerify(null);
         refresh();
         message.success('Staff members merged successfully');
+        // Navigate to validation page
+        const slug = getStaffSlug(mergedStaff);
+        router.push(`/system/validation/staff/${mergedStaff.id}/${slug}`);
     };
 
     const handleMergeCancel = () => {

@@ -60,11 +60,10 @@ impl LocationService {
     ) -> Result<Vec<SimilarResult<StateModel>>, DbErr> {
         let mut query = StateAlias::find();
 
-        if let Some(true) = params.restrict_to_parent {
-            if let Some(country_id) = params.country_id {
+        if let Some(true) = params.restrict_to_parent
+            && let Some(country_id) = params.country_id {
                 query = query.filter(StateAliasColumn::CountryId.eq(country_id));
             }
-        }
 
         let results: Vec<SimilarResult<crate::models::state_aliases::Model>> = find_similar_pipeline(
             db,
@@ -201,11 +200,10 @@ impl LocationService {
     ) -> Result<Vec<SimilarResult<PostalCodeModel>>, DbErr> {
         let mut query = PostalCodeAlias::find();
 
-        if let Some(true) = params.restrict_to_parent {
-            if let Some(country_id) = params.country_id {
+        if let Some(true) = params.restrict_to_parent
+            && let Some(country_id) = params.country_id {
                 query = query.filter(PostalCodeAliasColumn::CountryId.eq(country_id));
             }
-        }
 
         let results: Vec<SimilarResult<crate::models::postal_code_aliases::Model>> = find_similar_pipeline(
             db,

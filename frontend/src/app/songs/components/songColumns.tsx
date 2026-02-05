@@ -48,7 +48,7 @@ export const getSongColumns = ({
         dataIndex: 'name',
         sorter: true,
         fixed: 'left',
-        render: (name: string) => <span style={{fontWeight: 500}}>{name}</span>,
+        render: (name: string) => <span className="font-medium">{name}</span>,
     },
     {
         key: 'band_id',

@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use crate::services::types::{PaginatedResponse, PaginationInfo, SimilarityParams, SimilarResult};
 use crate::utils::similarity::find_similar_pipeline;
+use crate::utils::similarity::keys;
+use crate::utils::slug::{slug_it, sanitize_name};
 use crate::models::song_aliases::{Entity as SongAlias, Column as SongAliasColumn};
 use crate::models::song_performers::{Entity as SongPerformer, Column as SongPerformerColumn};
 use crate::models::albums_songs::{Entity as AlbumsSongs, Column as AlbumsSongsColumn};
@@ -19,6 +21,13 @@ use crate::models::temp_song_total_stats::{Entity as TempSongTotalStats, Column 
 use crate::models::song_duplicate_candidates::{Entity as SongDuplicateCandidate, Column as SongDuplicateCandidateColumn};
 use crate::services::action_log_service::ActionLogService;
 use std::collections::{HashMap, HashSet};
+
+// Type aliases for complex HashMap types used in playlist aggregation
+type PlaylistKey = (Option<u32>, Option<u32>, Option<u32>);
+type PlaylistValue = (u32, i32, i32);
+type ArchiveKey = (Option<u32>, Option<u32>, Option<u32>, Option<chrono::NaiveDate>);
+type ArchiveValue = (u32, i32, i32);
+type StaffPlaylistValue = (u32, Option<i32>);
 
 pub struct SongService;
 
@@ -80,8 +89,8 @@ impl SongService {
 
         let mut query = Song::find();
 
-        if let Some(name) = params.name {
-            if !name.is_empty() {
+        if let Some(name) = params.name
+            && !name.is_empty() {
                 match params.name_filter_type.as_deref() {
                     Some("starts_with") => {
                         query = query.filter(crate::models::songs::Column::Name.starts_with(&name));
@@ -97,7 +106,6 @@ impl SongService {
                     }
                 }
             }
-        }
 
         if let Some(verified) = params.verified {
             query = query.filter(crate::models::songs::Column::Verified.eq(if verified { 1 } else { 0 }));
@@ -128,13 +136,66 @@ impl SongService {
     }
 
     pub async fn create_song(db: &DatabaseConnection, data: SongModel) -> Result<SongModel, DbErr> {
+        let name = data.name.clone();
+        let band_id = data.band_id;
         let active_model: SongActiveModel = SongActiveModel {
             name: Set(data.name),
+            slug: Set(name.as_ref().map(|n| slug_it(n))),
             band_id: Set(data.band_id),
             sub_genre_id: Set(data.sub_genre_id),
             ..Default::default()
         };
-        active_model.insert(db).await
+        let song = active_model.insert(db).await?;
+
+        // Create alias entry for similarity search
+        if let Some(ref song_name) = name {
+            Self::create_song_alias(db, song.id, band_id.unwrap_or(0), song_name).await?;
+        }
+
+        Ok(song)
+    }
+
+    pub async fn create_song_alias(
+        db: &DatabaseConnection,
+        song_id: u32,
+        band_id: u32,
+        name: &str,
+    ) -> Result<(), DbErr> {
+        let slug = slug_it(name);
+        let sanitized = sanitize_name(name);
+        let soundex_key = keys::soundex(name);
+        let metaphone_key = keys::metaphone(name);
+        let (dmetaphone_key, dmetaphone_alt_key) = keys::double_metaphone(name);
+
+        // Check if alias already exists for this song with this key
+        let existing = SongAlias::find()
+            .filter(SongAliasColumn::SongId.eq(song_id))
+            .filter(SongAliasColumn::BandId.eq(band_id))
+            .filter(SongAliasColumn::AliasKey.eq(name))
+            .filter(SongAliasColumn::RadioStationId.is_null())
+            .one(db)
+            .await?;
+
+        if existing.is_some() {
+            return Ok(());
+        }
+
+        let alias = crate::models::song_aliases::ActiveModel {
+            song_id: Set(song_id),
+            band_id: Set(band_id),
+            alias_key: Set(name.to_string()),
+            slug: Set(Some(slug)),
+            sanitized_name: Set(Some(sanitized)),
+            soundex_key: Set(Some(soundex_key)),
+            phonetic_key: Set(Some(metaphone_key.clone())),
+            metaphone_key: Set(Some(metaphone_key)),
+            dmetaphone_key: Set(Some(dmetaphone_key)),
+            dmetaphone_alt_key: Set(dmetaphone_alt_key),
+            ..Default::default()
+        };
+
+        alias.insert(db).await?;
+        Ok(())
     }
 
     pub async fn update_song(db: &DatabaseConnection, id: u32, data: SongModel) -> Result<SongModel, DbErr> {
@@ -286,11 +347,10 @@ impl SongService {
                     if let Some(length) = obj.get("length").and_then(|v| v.as_u64()) {
                         active_model.length = Set(length);
                     }
-                    if let Some(release_date) = obj.get("release_date").and_then(|v| v.as_str()) {
-                        if let Ok(date) = chrono::NaiveDate::parse_from_str(release_date, "%Y-%m-%d") {
+                    if let Some(release_date) = obj.get("release_date").and_then(|v| v.as_str())
+                        && let Ok(date) = chrono::NaiveDate::parse_from_str(release_date, "%Y-%m-%d") {
                             active_model.release_date = Set(Some(date));
                         }
-                    }
                     if let Some(itunes_url) = obj.get("itunes_url").and_then(|v| v.as_str()) {
                         active_model.itunes_url = Set(Some(itunes_url.to_string()));
                     }
@@ -394,7 +454,7 @@ impl SongService {
                         .await?;
 
                     // Key: (radio_station_id, band_id, album_id) -> (id, spins, subtract_spins)
-                    let mut target_map: HashMap<(Option<u32>, Option<u32>, Option<u32>), (u32, i32, i32)> = HashMap::new();
+                    let mut target_map: HashMap<PlaylistKey, PlaylistValue> = HashMap::new();
                     for pl in &target_playlists {
                         target_map.insert(
                             (pl.radio_station_id, pl.band_id, pl.album_id),
@@ -441,7 +501,7 @@ impl SongService {
                         .await?;
 
                     // Key: (radio_station_id, band_id, album_id, week_ending) -> (id, spins, subtract_spins)
-                    let mut target_map: HashMap<(Option<u32>, Option<u32>, Option<u32>, Option<chrono::NaiveDate>), (u32, i32, i32)> = HashMap::new();
+                    let mut target_map: HashMap<ArchiveKey, ArchiveValue> = HashMap::new();
                     for arch in &target_archives {
                         target_map.insert(
                             (arch.radio_station_id, arch.band_id, arch.album_id, arch.week_ending),
@@ -486,7 +546,7 @@ impl SongService {
                         .await?;
 
                     // Key: (staff_member_id, band_id, album_id) -> (id, spins)
-                    let mut target_map: HashMap<(Option<u32>, Option<u32>, Option<u32>), (u32, Option<i32>)> = HashMap::new();
+                    let mut target_map: HashMap<PlaylistKey, StaffPlaylistValue> = HashMap::new();
                     for pl in &target_playlists {
                         target_map.insert(
                             (pl.staff_member_id, pl.band_id, pl.album_id),
@@ -530,7 +590,7 @@ impl SongService {
                         .await?;
 
                     // Key: (staff_member_id, band_id, album_id, week_ending) -> (id, spins)
-                    let mut target_map: HashMap<(Option<u32>, Option<u32>, Option<u32>, Option<chrono::NaiveDate>), (u32, Option<i32>)> = HashMap::new();
+                    let mut target_map: HashMap<ArchiveKey, StaffPlaylistValue> = HashMap::new();
                     for arch in &target_archives {
                         target_map.insert(
                             (arch.staff_member_id, arch.band_id, arch.album_id, arch.week_ending),

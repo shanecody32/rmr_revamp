@@ -430,7 +430,7 @@ export default function BandViewContent({params}: BandViewContentProps) {
     ];
 
     return (
-        <div className="max-w-7xl mx-auto">
+        <div>
             {/* Header Section */}
             <Card className="mb-6">
                 <div className="flex flex-wrap items-start gap-6">

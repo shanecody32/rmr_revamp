@@ -1,22 +1,31 @@
 'use client'
 
 import {PlusOutlined} from '@ant-design/icons';
-import {Button, Space} from 'antd';
-import {useState} from 'react';
+import {App, Button, Space} from 'antd';
+import {useRouter} from 'next/navigation';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
 import DetailDrawer from '@/components/common/data/DetailView/DetailDrawer';
 import EntityTable from '@/components/common/data/tables/EntityTable';
 import TableContainer from '@/components/common/data/tables/TableContainer';
 import TableToolbar from '@/components/common/data/tables/TableToolbar';
 import ErrorAlert from '@/components/common/feedback/ErrorAlert';
-import {columnOptions, radioStationColumns} from '@/app/radio-stations/components/radioStationColumns';
+import SimilarEntitiesModal, {type SearchSettings, loadSavedSettings} from '@/components/common/modals/SimilarEntitiesModal';
+import {columnOptions, getRadioStationColumns} from '@/app/radio-stations/components/radioStationColumns';
 import {useColumnVisibility} from '@/hooks/useColumnVisibility';
 import {useDetailDrawer} from '@/hooks/useDetailDrawer';
 import {useTableData} from '@/hooks/useTableData';
-import {fetchRadioStations} from '@/lib/api/radio-stations';
+import {
+    fetchRadioStations,
+    fetchSimilarRadioStations,
+    type SimilarRadioStation,
+} from '@/lib/api/radio-stations';
 import type {RadioStationResponse} from '@/types/api';
 
 import AddRadioStationModal from './AddRadioStationModal';
+import RadioStationMergeComparison from './RadioStationMergeComparison';
+
+const SETTINGS_KEY = 'radio-station-similarity-search-settings';
 
 const filterOptions = [
     {
@@ -42,7 +51,25 @@ const filterOptions = [
 ];
 
 export default function RadioStationsPageContent() {
-    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const mounted = useRef(true);
+    const router = useRouter();
+    const {message} = App.useApp();
+    const [modals, setModals] = useState({
+        add: false,
+        similarStations: false,
+        merge: false,
+    });
+
+    // States for station verification and merge process
+    const [similarStations, setSimilarStations] = useState<SimilarRadioStation[]>([]);
+    const [stationToVerify, setStationToVerify] = useState<RadioStationResponse | null>(null);
+    const [selectedStationsToMerge, setSelectedStationsToMerge] = useState<SimilarRadioStation[]>([]);
+    const [loadingSimilarStations, setLoadingSimilarStations] = useState(false);
+    const [verifyingStationId, setVerifyingStationId] = useState<number | null>(null);
+    const [searchSettings, setSearchSettings] = useState<SearchSettings>(() =>
+        loadSavedSettings(SETTINGS_KEY)
+    );
+
     const {selectedItem, drawerVisible, showDrawer, closeDrawer} = useDetailDrawer<RadioStationResponse>();
 
     const {visibleColumns, setVisibleColumns} = useColumnVisibility({
@@ -71,6 +98,124 @@ export default function RadioStationsPageContent() {
         fetchData: fetchRadioStations,
     });
 
+    useEffect(() => {
+        mounted.current = true;
+        return () => {
+            mounted.current = false;
+        };
+    }, []);
+
+    // Handle verify button click (forceModal = true bypasses "no results" redirect)
+    const handleVerifyClick = useCallback(async (station: RadioStationResponse, forceModal = false) => {
+        if (!mounted.current) return;
+
+        try {
+            setLoadingSimilarStations(true);
+            setVerifyingStationId(station.id);
+            setStationToVerify(station);
+
+            const similar = await fetchSimilarRadioStations({
+                search_term: station.name,
+                existing_id: station.id,
+                jw_weight: searchSettings.jw_weight,
+                dice_weight: searchSettings.dice_weight,
+                min_similarity: searchSettings.min_similarity,
+                limit: searchSettings.limit,
+            });
+
+            setSimilarStations(similar.filter(s => s.id !== station.id));
+
+            if (!forceModal && similar.length <= 1) {
+                // No similar matches - go directly to validation page
+                router.push(`/system/validation/radio-station/${station.id}/${station.slug}`);
+                return;
+            }
+
+            setModals(prev => ({...prev, similarStations: true}));
+
+        } catch (error) {
+            console.error('Error fetching similar stations:', error);
+            message.error('Failed to find similar radio stations');
+            if (forceModal) {
+                setSimilarStations([]);
+                setModals(prev => ({...prev, similarStations: true}));
+            }
+        } finally {
+            setLoadingSimilarStations(false);
+            setVerifyingStationId(null);
+        }
+    }, [searchSettings, router, message]);
+
+    // Force show comparisons modal (always shows even with no results)
+    const handleFindComparisons = useCallback(async (station: RadioStationResponse) => {
+        await handleVerifyClick(station, true);
+    }, [handleVerifyClick]);
+
+    // Handle selecting a station from similar stations modal
+    const handleSelectSimilarStation = (station: SimilarRadioStation) => {
+        if (!mounted.current) return;
+        const slug = station.name.toLowerCase().replace(/\s+/g, '-');
+        router.push(`/radio-stations/view/${station.id}/${slug}`);
+        setModals(prev => ({...prev, similarStations: false}));
+    };
+
+    // Handle proceeding without merging - go to validation page
+    const handleProceedWithoutMerge = () => {
+        if (!stationToVerify || !mounted.current) return;
+        router.push(`/system/validation/radio-station/${stationToVerify.id}/${stationToVerify.slug}`);
+        setModals(prev => ({...prev, similarStations: false}));
+    };
+
+    // Handle selecting stations to merge
+    const handleSelectStationsToMerge = (selectedStations: SimilarRadioStation[]) => {
+        if (!mounted.current || !stationToVerify) return;
+
+        setSelectedStationsToMerge(selectedStations);
+        setModals(prev => ({...prev, similarStations: false, merge: true}));
+    };
+
+    // Handle rerunning search with new settings
+    const handleRerunSearch = useCallback(async (settings: SearchSettings) => {
+        if (!stationToVerify || !mounted.current) return;
+
+        try {
+            setLoadingSimilarStations(true);
+            setSearchSettings(settings);
+
+            const similar = await fetchSimilarRadioStations({
+                search_term: stationToVerify.name,
+                existing_id: stationToVerify.id,
+                jw_weight: settings.jw_weight,
+                dice_weight: settings.dice_weight,
+                min_similarity: settings.min_similarity,
+                limit: settings.limit,
+            });
+
+            setSimilarStations(similar.filter(s => s.id !== stationToVerify.id));
+        } catch (error) {
+            console.error('Error fetching similar stations:', error);
+            message.error('Failed to rerun search');
+        } finally {
+            setLoadingSimilarStations(false);
+        }
+    }, [stationToVerify, message]);
+
+    // Handle merge completion - go to validation page
+    const handleMergeComplete = (mergedStation: RadioStationResponse) => {
+        if (!mounted.current) return;
+
+        message.success('Radio stations merged successfully');
+        setModals(prev => ({...prev, merge: false}));
+        refresh();
+        router.push(`/system/validation/radio-station/${mergedStation.id}/${mergedStation.slug}`);
+    };
+
+    const radioStationColumns = useMemo(() => getRadioStationColumns({
+        onVerifyClick: handleVerifyClick,
+        onFindComparisons: handleFindComparisons,
+        verifyingStationId,
+    }), [handleVerifyClick, handleFindComparisons, verifyingStationId]);
+
     return (
         <>
             {error && (
@@ -90,7 +235,7 @@ export default function RadioStationsPageContent() {
                             onFilterChange={setFilters}
                             onColumnChange={setVisibleColumns}
                             filterOptions={filterOptions}
-                            columnOptions={columnOptions}
+                            columnOptions={[...columnOptions]}
                             visibleColumns={visibleColumns}
                             activeFilters={filters}
                             searchTerm={searchTerm}
@@ -100,7 +245,7 @@ export default function RadioStationsPageContent() {
                         <Button
                             type="primary"
                             icon={<PlusOutlined/>}
-                            onClick={() => setIsAddModalOpen(true)}
+                            onClick={() => setModals(prev => ({...prev, add: true}))}
                         >
                             Add Station
                         </Button>
@@ -122,10 +267,10 @@ export default function RadioStationsPageContent() {
             </TableContainer>
 
             <AddRadioStationModal
-                open={isAddModalOpen}
-                onCancel={() => setIsAddModalOpen(false)}
+                open={modals.add}
+                onCancel={() => setModals(prev => ({...prev, add: false}))}
                 onSuccess={() => {
-                    setIsAddModalOpen(false);
+                    setModals(prev => ({...prev, add: false}));
                     refresh();
                 }}
             />
@@ -144,6 +289,46 @@ export default function RadioStationsPageContent() {
                     }
                 ]}
             />
+
+            <SimilarEntitiesModal<SimilarRadioStation>
+                open={modals.similarStations}
+                onCancel={() => setModals(prev => ({...prev, similarStations: false}))}
+                onSelect={handleSelectSimilarStation}
+                onProceed={handleProceedWithoutMerge}
+                onMergeSelected={handleSelectStationsToMerge}
+                onRerunSearch={handleRerunSearch}
+                similarEntities={similarStations}
+                entityName="radio station"
+                searchedName={stationToVerify?.name || ''}
+                loading={loadingSimilarStations}
+                mode="select-multiple"
+                searchSettings={searchSettings}
+                settingsStorageKey={SETTINGS_KEY}
+                manualSearch={{
+                    searchEntities: async (query) => {
+                        const result = await fetchRadioStations({name: query, name_filter_type: 'contains', page: 1, page_size: 20});
+                        return result.data;
+                    },
+                    mapToSimilar: (station) => ({
+                        id: station.id,
+                        name: station.name,
+                        similarity_score: 0,
+                    } as SimilarRadioStation),
+                    excludeId: stationToVerify?.id,
+                }}
+            />
+
+            {stationToVerify && (
+                <RadioStationMergeComparison
+                    open={modals.merge}
+                    onCancel={() => {
+                        setModals(prev => ({...prev, merge: false, similarStations: true}));
+                    }}
+                    originalStationId={stationToVerify.id}
+                    selectedStationIds={selectedStationsToMerge.map(station => station.id)}
+                    onMergeComplete={handleMergeComplete}
+                />
+            )}
         </>
     );
 }

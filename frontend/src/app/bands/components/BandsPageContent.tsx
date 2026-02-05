@@ -192,7 +192,8 @@ export default function BandsPageContent() {
             setSimilarBands(similar.filter(b => b.id !== band.id));
 
             if (!forceModal && similar.length <= 1) {
-                router.push(`/bands/edit/${band.id}/${band.slug}`);
+                // No similar matches - go directly to validation page
+                router.push(`/system/validation/band/${band.id}/${band.slug}`);
                 return;
             }
 
@@ -223,10 +224,10 @@ export default function BandsPageContent() {
         setModals(prev => ({...prev, similarBands: false}));
     };
 
-    // Handle proceeding without merging
+    // Handle proceeding without merging - go to validation page
     const handleProceedWithoutMerge = () => {
         if (!bandToVerify || !mounted.current) return;
-        router.push(`/bands/edit/${bandToVerify.id}/${bandToVerify.slug}`);
+        router.push(`/system/validation/band/${bandToVerify.id}/${bandToVerify.slug}`);
         setModals(prev => ({...prev, similarBands: false}));
     };
 
@@ -265,14 +266,14 @@ export default function BandsPageContent() {
         }
     }, [bandToVerify, message]);
 
-    // Handle merge completion
+    // Handle merge completion - go to validation page
     const handleMergeComplete = (mergedBand: BandResponse) => {
         if (!mounted.current) return;
 
         message.success('Bands merged successfully');
         setModals(prev => ({...prev, merge: false}));
         refresh();
-        router.push(`/bands/edit/${mergedBand.id}/${mergedBand.slug}`);
+        router.push(`/system/validation/band/${mergedBand.id}/${mergedBand.slug}`);
     };
 
     const bandColumns = useMemo(() => getBandColumns({

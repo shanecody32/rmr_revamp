@@ -5,12 +5,23 @@ use axum::{
     routing::{get, post, put, delete},
     Json, Router,
 };
-use crate::services::album_service::{AlbumService, AlbumFilterParams, UpdateAlbumRequest, GenreUpdateResult, MergeAlbumsRequest};
+use crate::services::{AlbumService, AlbumFilterParams, UpdateAlbumRequest, GenreUpdateResult, MergeAlbumsRequest};
 use crate::services::types::{PaginatedResponse, SimilarityParams, SimilarResult};
+use crate::views::ApiError;
 use crate::job_state::AppState;
 use crate::models::albums::Model as Album;
-use crate::utils::error::handle_internal_error;
-use sea_orm::DbErr;
+use sea_orm::ActiveModelTrait;
+use serde::Deserialize;
+use utoipa::ToSchema;
+
+/// Request payload for creating an album
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct CreateAlbumRequest {
+    #[serde(flatten)]
+    pub album: Album,
+    /// Optional band ID to associate the album with
+    pub band_id: Option<u32>,
+}
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -43,7 +54,7 @@ pub(crate) async fn get_similar_albums(
 ) -> impl IntoResponse {
     match AlbumService::get_similar_albums(&state.db, params).await {
         Ok(albums) => (StatusCode::OK, Json(albums)).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -64,23 +75,37 @@ pub(crate) async fn get_albums(
 ) -> impl IntoResponse {
     match AlbumService::get_albums(&state.db, params).await {
         Ok(paginated) => (StatusCode::OK, Json(paginated)).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
 #[utoipa::path(
     post,
     path = "/albums",
-    request_body = Album,
+    request_body = CreateAlbumRequest,
     responses(
         (status = 201, description = "Album created", body = Album),
         (status = 500, description = "Internal server error")
     )
 )]
-pub(crate) async fn create_album(State(state): State<AppState>, Json(data): Json<Album>) -> impl IntoResponse {
-    match AlbumService::create_album(&state.db, data).await {
-        Ok(album) => (StatusCode::CREATED, Json(album)).into_response(),
-        Err(e) => handle_internal_error(e),
+pub(crate) async fn create_album(State(state): State<AppState>, Json(data): Json<CreateAlbumRequest>) -> impl IntoResponse {
+    let band_id = data.band_id;
+
+    match AlbumService::create_album(&state.db, data.album, band_id).await {
+        Ok(album) => {
+            // If band_id was provided, also create the albums_bands junction entry
+            if let Some(band_id) = band_id {
+                let _ = crate::models::albums_bands::ActiveModel {
+                    album_id: sea_orm::ActiveValue::Set(Some(album.id)),
+                    band_id: sea_orm::ActiveValue::Set(Some(band_id)),
+                    ..Default::default()
+                }
+                .insert(&state.db)
+                .await;
+            }
+            (StatusCode::CREATED, Json(album)).into_response()
+        }
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -99,8 +124,8 @@ pub(crate) async fn create_album(State(state): State<AppState>, Json(data): Json
 pub(crate) async fn get_album(State(state): State<AppState>, Path(id): Path<u32>) -> impl IntoResponse {
     match AlbumService::get_album_by_id(&state.db, id).await {
         Ok(Some(album)) => (StatusCode::OK, Json(album)).into_response(),
-        Ok(None) => (StatusCode::NOT_FOUND, "Album not found").into_response(),
-        Err(e) => handle_internal_error(e),
+        Ok(None) => ApiError::not_found("Album").into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -124,8 +149,7 @@ pub(crate) async fn update_album(
 ) -> impl IntoResponse {
     match AlbumService::update_album_full(&state.db, id, data).await {
         Ok(album) => (StatusCode::OK, Json(album)).into_response(),
-        Err(DbErr::RecordNotFound(msg)) => (StatusCode::NOT_FOUND, msg).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -143,7 +167,7 @@ pub(crate) async fn update_album(
 pub(crate) async fn delete_album(State(state): State<AppState>, Path(id): Path<u32>) -> impl IntoResponse {
     match AlbumService::delete_album(&state.db, id).await {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -161,7 +185,7 @@ pub(crate) async fn delete_album(State(state): State<AppState>, Path(id): Path<u
 pub(crate) async fn get_album_songs(State(state): State<AppState>, Path(id): Path<u32>) -> impl IntoResponse {
     match AlbumService::get_album_songs(&state.db, id).await {
         Ok(songs) => (StatusCode::OK, Json(songs)).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -183,8 +207,7 @@ pub(crate) async fn update_album_genre(
 ) -> impl IntoResponse {
     match AlbumService::determine_sub_genre_for_charting(&state.db, id).await {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
-        Err(DbErr::RecordNotFound(msg)) => (StatusCode::NOT_FOUND, msg).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -201,7 +224,7 @@ pub(crate) async fn update_all_albums_genres(
 ) -> impl IntoResponse {
     match AlbumService::update_all_albums_genres(&state.db).await {
         Ok(results) => (StatusCode::OK, Json(results)).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -212,6 +235,6 @@ pub(crate) async fn merge_albums(State(state): State<AppState>, Json(req): Json<
 
     match AlbumService::merge_albums(&state.db, req, user_id, ip_address).await {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }

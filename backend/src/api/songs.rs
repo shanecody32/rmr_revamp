@@ -7,9 +7,9 @@ use axum::{
 };
 use crate::services::song_service::{SongService, SongFilterParams, MergeSongsRequest};
 use crate::services::types::{PaginatedResponse, SimilarityParams, SimilarResult};
+use crate::views::ApiError;
 use crate::job_state::AppState;
 use crate::models::songs::Model as Song;
-use sea_orm::DbErr;
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -39,7 +39,7 @@ pub(crate) async fn get_similar_songs(
 ) -> impl IntoResponse {
     match SongService::get_similar_songs(&state.db, params).await {
         Ok(songs) => (StatusCode::OK, Json(songs)).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -60,7 +60,7 @@ pub(crate) async fn get_songs(
 ) -> impl IntoResponse {
     match SongService::get_songs(&state.db, params).await {
         Ok(paginated) => (StatusCode::OK, Json(paginated)).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -76,7 +76,7 @@ pub(crate) async fn get_songs(
 pub(crate) async fn create_song(State(state): State<AppState>, Json(data): Json<Song>) -> impl IntoResponse {
     match SongService::create_song(&state.db, data).await {
         Ok(song) => (StatusCode::CREATED, Json(song)).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -95,8 +95,8 @@ pub(crate) async fn create_song(State(state): State<AppState>, Json(data): Json<
 pub(crate) async fn get_song(State(state): State<AppState>, Path(id): Path<u32>) -> impl IntoResponse {
     match SongService::get_song_by_id(&state.db, id).await {
         Ok(Some(song)) => (StatusCode::OK, Json(song)).into_response(),
-        Ok(None) => (StatusCode::NOT_FOUND, "Song not found").into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Ok(None) => ApiError::not_found("Song").into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -120,8 +120,7 @@ pub(crate) async fn update_song(
 ) -> impl IntoResponse {
     match SongService::update_song(&state.db, id, data).await {
         Ok(song) => (StatusCode::OK, Json(song)).into_response(),
-        Err(DbErr::RecordNotFound(msg)) => (StatusCode::NOT_FOUND, msg).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -139,7 +138,7 @@ pub(crate) async fn update_song(
 pub(crate) async fn delete_song(State(state): State<AppState>, Path(id): Path<u32>) -> impl IntoResponse {
     match SongService::delete_song(&state.db, id).await {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -150,6 +149,6 @@ pub(crate) async fn merge_songs(State(state): State<AppState>, Json(req): Json<M
 
     match SongService::merge_songs(&state.db, req, user_id, ip_address).await {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }

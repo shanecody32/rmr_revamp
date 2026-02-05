@@ -7,6 +7,7 @@ use axum::{
 };
 use crate::services::location_service::LocationService;
 use crate::services::types::{PaginatedResponse, PaginationInfo, SimilarityParams, SimilarResult};
+use crate::views::ApiError;
 use crate::job_state::AppState;
 use crate::models::cities::Model as City;
 use serde::Deserialize;
@@ -36,7 +37,7 @@ pub(crate) async fn get_similar_cities(
 ) -> impl IntoResponse {
     match LocationService::get_similar_cities(&state.db, params).await {
         Ok(cities) => (StatusCode::OK, Json(cities)).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -98,12 +99,12 @@ pub(crate) async fn get_cities(
                 pagination: PaginationInfo {
                     page,
                     page_size,
-                    total_pages: (total_items + page_size - 1) / page_size,
+                    total_pages: total_items.div_ceil(page_size),
                     total_items,
                 }
             })).into_response()
         },
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -122,6 +123,6 @@ pub(crate) async fn get_city(State(state): State<AppState>, Path(id): Path<u32>)
     match LocationService::get_city_by_id(&state.db, id).await {
         Ok(Some(city)) => (StatusCode::OK, Json(city)).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, "City not found").into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }

@@ -5,7 +5,8 @@ use axum::{
     routing::{get, post, patch, delete},
     Json, Router,
 };
-use crate::services::band_service::BandService;
+use crate::services::BandService;
+use crate::views::ApiError;
 use crate::job_state::AppState;
 use crate::models::band_images::Model as BandImage;
 use serde::Deserialize;
@@ -78,7 +79,7 @@ pub(crate) async fn get_band_image(State(_state): State<AppState>, Path(_id): Pa
 pub(crate) async fn list_band_images(State(state): State<AppState>, Path(band_id): Path<u32>) -> impl IntoResponse {
     match BandService::get_band_images(&state.db, band_id).await {
         Ok(images) => (StatusCode::OK, Json(images)).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 

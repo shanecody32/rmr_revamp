@@ -6,10 +6,13 @@ import {
     EnvironmentOutlined,
     ExpandOutlined,
     GlobalOutlined,
+    CheckCircleOutlined,
+    ClockCircleOutlined,
     InfoCircleOutlined,
     LinkOutlined,
     MailOutlined,
     PhoneOutlined,
+    PlayCircleOutlined,
     SwapOutlined,
     ToolOutlined,
     UserOutlined,
@@ -456,11 +459,69 @@ export default function StaffViewContent({params}: StaffViewContentProps) {
                     </Card>
                 </div>
             )
+        },
+        {
+            key: 'playlist',
+            label: (
+                <span className="flex items-center gap-1">
+                    <PlayCircleOutlined/>
+                    <span>Playlist</span>
+                </span>
+            ),
+            children: (
+                <div className="space-y-8">
+                    <Card title="Playlist Status" size="small">
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <Text strong className="block">Current Status</Text>
+                                    {staff.playlist_finalised ? (
+                                        <Tag icon={<CheckCircleOutlined/>} color="success" className="mt-1">
+                                            Finalised
+                                        </Tag>
+                                    ) : (
+                                        <Tag icon={<ClockCircleOutlined/>} color="processing" className="mt-1">
+                                            In Progress
+                                        </Tag>
+                                    )}
+                                </div>
+                                <div>
+                                    <Text strong className="block">Has Playlist</Text>
+                                    <Tag color={staff.has_playlist ? 'success' : 'default'} className="mt-1">
+                                        {staff.has_playlist ? 'Yes' : 'No'}
+                                    </Tag>
+                                </div>
+                                <div>
+                                    <Text strong className="block">Last Reported</Text>
+                                    <Text className="mt-1 block">
+                                        {staff.last_reported
+                                            ? new Date(staff.last_reported).toLocaleDateString()
+                                            : 'Never'}
+                                    </Text>
+                                </div>
+                            </div>
+                        </div>
+                    </Card>
+
+                    <div className="flex justify-center gap-4">
+                        <Link href={`/staff/view/${staff.id}/${staff.slug}/playlist`}>
+                            <Button type="default" size="large">
+                                View Playlist
+                            </Button>
+                        </Link>
+                        <Link href={`/staff/view/${staff.id}/${staff.slug}/playlist/edit`}>
+                            <Button type="primary" size="large">
+                                Edit Playlist
+                            </Button>
+                        </Link>
+                    </div>
+                </div>
+            )
         }
     ];
 
     return (
-        <div className="max-w-7xl mx-auto">
+        <div>
             {/* Archived Banner */}
             {isArchived && (
                 <Alert

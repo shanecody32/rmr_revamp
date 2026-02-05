@@ -34,6 +34,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use utoipa::{IntoParams, ToSchema};
 
+// Type aliases for complex HashMap types used in playlist aggregation
+type PlaylistKey = (Option<u32>, Option<u32>, Option<u32>);
+type StaffArchiveKey = (Option<chrono::NaiveDate>, Option<u32>, Option<u32>, Option<u32>);
+
 pub struct StaffService;
 
 // ============================================================================
@@ -145,8 +149,8 @@ impl StaffService {
         let mut query = StaffMember::find();
 
         // Apply filters
-        if let Some(ref name) = params.name {
-            if !name.is_empty() {
+        if let Some(ref name) = params.name
+            && !name.is_empty() {
                 let name_condition = match params.name_filter_type.as_deref() {
                     Some("starts_with") => {
                         Condition::any()
@@ -175,7 +179,6 @@ impl StaffService {
                 };
                 query = query.filter(name_condition);
             }
-        }
 
         if let Some(station_id) = params.radio_station_id {
             query = query.filter(StaffColumn::RadioStationId.eq(station_id));
@@ -258,8 +261,8 @@ impl StaffService {
             .column(StaffColumn::Modified);
 
         // Apply filters (same as above)
-        if let Some(ref name) = params.name {
-            if !name.is_empty() {
+        if let Some(ref name) = params.name
+            && !name.is_empty() {
                 let name_condition = match params.name_filter_type.as_deref() {
                     Some("starts_with") => {
                         Condition::any()
@@ -288,7 +291,6 @@ impl StaffService {
                 };
                 query = query.filter(name_condition);
             }
-        }
 
         if let Some(station_id) = params.radio_station_id {
             query = query.filter(StaffColumn::RadioStationId.eq(station_id));
@@ -361,11 +363,10 @@ impl StaffService {
             let mut view = StaffDetailView::new(staff);
 
             // Load station if we have a radio_station_id
-            if let Some(station_id) = view.staff.radio_station_id {
-                if let Some(station) = RadioStation::find_by_id(station_id).one(db).await? {
+            if let Some(station_id) = view.staff.radio_station_id
+                && let Some(station) = RadioStation::find_by_id(station_id).one(db).await? {
                     view = view.with_station(station);
                 }
-            }
 
             // Load optional relations based on params
             if params.include_images.unwrap_or(true) {
@@ -421,8 +422,8 @@ impl StaffService {
             }
 
             // Load transfer links if applicable
-            if let Some(to_id) = view.staff.transferred_to_id {
-                if let Some(to_staff) = StaffMember::find_by_id(to_id).one(db).await? {
+            if let Some(to_id) = view.staff.transferred_to_id
+                && let Some(to_staff) = StaffMember::find_by_id(to_id).one(db).await? {
                     let station_name = if let Some(sid) = to_staff.radio_station_id {
                         RadioStation::find_by_id(sid)
                             .one(db)
@@ -440,10 +441,9 @@ impl StaffService {
                         station_name,
                     });
                 }
-            }
 
-            if let Some(from_id) = view.staff.transferred_from_id {
-                if let Some(from_staff) = StaffMember::find_by_id(from_id).one(db).await? {
+            if let Some(from_id) = view.staff.transferred_from_id
+                && let Some(from_staff) = StaffMember::find_by_id(from_id).one(db).await? {
                     let station_name = if let Some(sid) = from_staff.radio_station_id {
                         RadioStation::find_by_id(sid)
                             .one(db)
@@ -461,7 +461,6 @@ impl StaffService {
                         station_name,
                     });
                 }
-            }
 
             Ok(Some(view))
         } else {
@@ -541,12 +540,11 @@ impl StaffService {
         let mut query = StaffMemberAlias::find();
 
         // Station scoping - always restrict to station if provided
-        if let Some(true) = params.restrict_to_parent {
-            if let Some(radio_station_id) = params.radio_station_id {
+        if let Some(true) = params.restrict_to_parent
+            && let Some(radio_station_id) = params.radio_station_id {
                 query =
                     query.filter(StaffMemberAliasColumn::RadioStationId.eq(radio_station_id));
             }
-        }
 
         let results: Vec<SimilarResult<crate::models::staff_member_aliases::Model>> =
             find_similar_pipeline(
@@ -587,11 +585,10 @@ impl StaffService {
 
         let mut final_results = Vec::new();
         for r in results {
-            if let Some(exclude) = exclude_id {
-                if r.model.staff_member_id == exclude {
+            if let Some(exclude) = exclude_id
+                && r.model.staff_member_id == exclude {
                     continue;
                 }
-            }
             if let Some(member) = members.iter().find(|m| m.id == r.model.staff_member_id) {
                 final_results.push(SimilarResult {
                     model: member.clone(),
@@ -722,8 +719,8 @@ impl StaffService {
                             .await?;
 
                         for img in images {
-                            if let Some(ref path) = img.path {
-                                if existing_paths.contains(path) {
+                            if let Some(ref path) = img.path
+                                && existing_paths.contains(path) {
                                     // Delete duplicate
                                     let active: crate::models::staff_images::ActiveModel =
                                         img.into();
@@ -731,7 +728,6 @@ impl StaffService {
                                     stats.images_deduped += 1;
                                     continue;
                                 }
-                            }
                             let mut active: crate::models::staff_images::ActiveModel = img.into();
                             active.staff_member_id = Set(Some(target_id));
                             active.update(txn).await?;
@@ -755,15 +751,14 @@ impl StaffService {
                             .await?;
 
                         for lnk in links {
-                            if let Some(ref url) = lnk.link {
-                                if existing_links.contains(url) {
+                            if let Some(ref url) = lnk.link
+                                && existing_links.contains(url) {
                                     let active: crate::models::staff_links::ActiveModel =
                                         lnk.into();
                                     active.delete(txn).await?;
                                     stats.links_deduped += 1;
                                     continue;
                                 }
-                            }
                             let mut active: crate::models::staff_links::ActiveModel = lnk.into();
                             active.staff_member_id = Set(Some(target_id));
                             active.update(txn).await?;
@@ -787,15 +782,14 @@ impl StaffService {
                             .await?;
 
                         for ph in phones {
-                            if let Some(ref phone) = ph.phone {
-                                if existing_phones.contains(&(phone.clone(), ph.ext)) {
+                            if let Some(ref phone) = ph.phone
+                                && existing_phones.contains(&(phone.clone(), ph.ext)) {
                                     let active: crate::models::staff_phone_numbers::ActiveModel =
                                         ph.into();
                                     active.delete(txn).await?;
                                     stats.phones_deduped += 1;
                                     continue;
                                 }
-                            }
                             let mut active: crate::models::staff_phone_numbers::ActiveModel =
                                 ph.into();
                             active.staff_member_id = Set(Some(target_id));
@@ -855,7 +849,7 @@ impl StaffService {
 
                     // 7. Move playlists with aggregation
                     // Match on: band_id + album_id + song_id (current week)
-                    let existing_playlists: HashMap<(Option<u32>, Option<u32>, Option<u32>), u32> =
+                    let existing_playlists: HashMap<PlaylistKey, u32> =
                         StaffPlaylist::find()
                             .filter(StaffPlaylistColumn::StaffMemberId.eq(target_id))
                             .all(txn)
@@ -902,15 +896,7 @@ impl StaffService {
 
                     // 8. Move playlist archives with aggregation
                     // Match on: week_ending + band_id + album_id + song_id
-                    let existing_archives: HashMap<
-                        (
-                            Option<chrono::NaiveDate>,
-                            Option<u32>,
-                            Option<u32>,
-                            Option<u32>,
-                        ),
-                        u32,
-                    > = StaffPlaylistArchive::find()
+                    let existing_archives: HashMap<StaffArchiveKey, u32> = StaffPlaylistArchive::find()
                         .filter(StaffPlaylistArchiveColumn::StaffMemberId.eq(target_id))
                         .all(txn)
                         .await?
@@ -1344,15 +1330,14 @@ impl StaffService {
         // Group archives by sub_genre_id, tracking unique songs and bands
         let mut sub_genre_stats: HashMap<u32, (HashSet<u32>, HashSet<u32>)> = HashMap::new();
         for archive in &archives {
-            if let (Some(song_id), Some(band_id)) = (archive.song_id, archive.band_id) {
-                if let Some(&sub_genre_id) = song_to_genre.get(&song_id) {
+            if let (Some(song_id), Some(band_id)) = (archive.song_id, archive.band_id)
+                && let Some(&sub_genre_id) = song_to_genre.get(&song_id) {
                     let entry = sub_genre_stats
                         .entry(sub_genre_id)
                         .or_insert_with(|| (HashSet::new(), HashSet::new()));
                     entry.0.insert(song_id);  // unique songs
                     entry.1.insert(band_id);  // unique bands
                 }
-            }
         }
 
         // Filter to qualifying sub-genres (5+ songs from 5+ bands)

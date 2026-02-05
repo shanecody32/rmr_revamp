@@ -1,3 +1,4 @@
+import type {Metadata} from 'next';
 import {Suspense} from 'react';
 
 import LoadingSpinner from '@/components/common/feedback/LoadingSpinner';
@@ -8,6 +9,19 @@ import LabelEditContent from './components/LabelEditContent';
 interface PageParams {
     id: string;
     slug: string;
+}
+
+function formatSlug(slug: string): string {
+    return slug.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+}
+
+export async function generateMetadata({params}: {params: Promise<PageParams>}): Promise<Metadata> {
+    const {slug} = await params;
+    const name = formatSlug(slug);
+    return {
+        title: `Edit ${name} - Label - RMR Admin`,
+        description: `Edit details for ${name} label`,
+    };
 }
 
 export default async function LabelEditPage({

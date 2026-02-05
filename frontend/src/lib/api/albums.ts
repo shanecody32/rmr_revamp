@@ -1,7 +1,12 @@
-import type {AlbumResponse, MergeAlbumsRequest, AlbumMergeResult} from '@/types/api/albums';
+import type {AlbumResponse, AlbumWithRelationsResponse, MergeAlbumsRequest, AlbumMergeResult} from '@/types/api/albums';
 import {ApiParams, ApiResponse, nameFilterTypeMap, PaginationResponse} from '@/types/api/common';
 
 import {api} from './config';
+
+export const fetchAlbumById = async (id: number): Promise<AlbumWithRelationsResponse> => {
+    const response = await api.get<AlbumWithRelationsResponse>(`/albums/${id}`);
+    return response.data;
+};
 
 export const fetchAlbums = async (params: ApiParams): Promise<{
     data: AlbumResponse[];
@@ -62,5 +67,35 @@ export const fetchSimilarAlbums = async (params: {
     restrict_to_parent?: boolean;
 }): Promise<SimilarAlbum[]> => {
     const response = await api.get<SimilarAlbum[]>('/albums/similar', {params});
+    return response.data;
+};
+
+export interface UnknownAlbumResponse {
+    id: number;
+    name: string | null;
+    slug: string | null;
+}
+
+/**
+ * Get or create an "Unknown" album for a band.
+ * Used when creating playlist entries where the song's album is unknown.
+ */
+export const fetchUnknownAlbum = async (bandId: number): Promise<UnknownAlbumResponse> => {
+    const response = await api.get<UnknownAlbumResponse>(`/bands/${bandId}/unknown-album`);
+    return response.data;
+};
+
+export interface AlbumSong {
+    id: number;
+    name: string | null;
+    slug: string | null;
+    band_id: number | null;
+}
+
+/**
+ * Get all songs for a specific album.
+ */
+export const fetchAlbumSongs = async (albumId: number): Promise<AlbumSong[]> => {
+    const response = await api.get<AlbumSong[]>(`/albums/${albumId}/songs`);
     return response.data;
 };

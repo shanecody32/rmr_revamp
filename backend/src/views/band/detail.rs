@@ -9,7 +9,7 @@ use crate::models::countries::Model as CountryModel;
 use crate::models::states::Model as StateModel;
 use crate::models::cities::Model as CityModel;
 use crate::models::band_images::Model as BandImageModel;
-use crate::services::album_service::AlbumResponse;
+use crate::services::AlbumResponse;
 use serde::Serialize;
 use utoipa::ToSchema;
 

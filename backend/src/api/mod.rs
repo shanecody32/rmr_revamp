@@ -22,6 +22,9 @@ mod auth;
 mod system;
 mod duplicate_scan;
 mod media;
+mod transfers;
+mod status;
+mod staff_playlists;
 mod openapi;
 
 pub fn create_router(state: AppState) -> Router {
@@ -47,6 +50,9 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/system", system::router())
         .nest("/duplicate-scan", duplicate_scan::router())
         .nest("/media", media::router())
+        .nest("/transfers", transfers::router())
+        .nest("/status", status::router())
+        .nest("/staff_playlists", staff_playlists::router())
         .with_state(state)
 }
 

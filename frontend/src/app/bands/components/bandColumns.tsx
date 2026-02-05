@@ -64,33 +64,14 @@ export const getBandColumns = ({
                         <img
                             src={imageUrl}
                             alt={name}
-                            style={{
-                                width: 32,
-                                height: 32,
-                                borderRadius: '50%',
-                                objectFit: 'cover',
-                                flexShrink: 0,
-                            }}
+                            className="w-8 h-8 rounded-full object-cover flex-shrink-0"
                         />
                     ) : (
-                        <div
-                            style={{
-                                width: 32,
-                                height: 32,
-                                borderRadius: '50%',
-                                backgroundColor: '#f0f0f0',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                flexShrink: 0,
-                                color: '#999',
-                                fontSize: 12,
-                            }}
-                        >
+                        <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0 text-gray-400 text-xs">
                             {name?.charAt(0)?.toUpperCase() || '?'}
                         </div>
                     )}
-                    <span style={{fontWeight: 500}}>{name}</span>
+                    <span className="font-medium">{name}</span>
                 </Space>
             );
         },

@@ -7,6 +7,7 @@ use axum::{
 };
 use crate::services::genre_service::GenreService;
 use crate::services::types::{PaginatedResponse, PaginationInfo};
+use crate::views::ApiError;
 use crate::job_state::AppState;
 use crate::models::sub_genres::Model as SubGenre;
 use serde::Deserialize;
@@ -81,11 +82,11 @@ pub(crate) async fn get_sub_genres(
                 pagination: PaginationInfo {
                     page,
                     page_size,
-                    total_pages: (total_items + page_size - 1) / page_size,
+                    total_pages: total_items.div_ceil(page_size),
                     total_items,
                 }
             })).into_response()
         },
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }

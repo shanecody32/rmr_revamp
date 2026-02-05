@@ -1,5 +1,7 @@
 'use client'
 
+import {memo} from 'react';
+
 import ResponsiveImage from '@/components/common/layout/ResponsiveImage';
 import {getFallbackImageUrl} from '@/lib/utils/media';
 
@@ -10,7 +12,7 @@ interface AlbumImageProps {
 
 const FALLBACK_IMAGE = getFallbackImageUrl();
 
-export default function AlbumImage({src, alt}: AlbumImageProps) {
+const AlbumImage = memo(function AlbumImage({src, alt}: AlbumImageProps) {
     return (
         <div className="flex-shrink-0" style={{width: 96, height: 96}}>
             <ResponsiveImage
@@ -25,4 +27,6 @@ export default function AlbumImage({src, alt}: AlbumImageProps) {
             />
         </div>
     );
-}
+});
+
+export default AlbumImage;

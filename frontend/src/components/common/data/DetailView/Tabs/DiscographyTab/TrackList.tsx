@@ -1,6 +1,7 @@
 'use client'
 
 import {Collapse, List, Space, Typography} from 'antd';
+import {memo} from 'react';
 
 import type {SongWithTrackInfoResponse} from '@/types/api/songs';
 
@@ -13,7 +14,7 @@ interface TrackListProps {
     tracks: SongWithTrackInfoResponse[];
 }
 
-export default function TrackList({albumId, tracks}: TrackListProps) {
+const TrackList = memo(function TrackList({albumId, tracks}: TrackListProps) {
     const items = [
         {
             key: `songs-${albumId}`,
@@ -62,4 +63,6 @@ export default function TrackList({albumId, tracks}: TrackListProps) {
             items={items}
         />
     );
-}
+});
+
+export default TrackList;

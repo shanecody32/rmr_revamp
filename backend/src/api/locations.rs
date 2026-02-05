@@ -51,8 +51,8 @@ pub(crate) async fn search_locations(
     // Search countries
     if let Ok(countries) = LocationService::get_countries(&state.db).await {
         for c in countries {
-            if let Some(name) = c.name {
-                if name.to_lowercase().contains(&params.query.to_lowercase()) {
+            if let Some(name) = c.name
+                && name.to_lowercase().contains(&params.query.to_lowercase()) {
                     results.push(LocationResponse {
                         id: c.id,
                         name,
@@ -61,15 +61,14 @@ pub(crate) async fn search_locations(
                         state_id: None,
                     });
                 }
-            }
         }
     }
 
     // Search states
     if let Ok(states) = LocationService::get_states(&state.db, None).await {
         for s in states {
-            if let Some(name) = s.name {
-                if name.to_lowercase().contains(&params.query.to_lowercase()) {
+            if let Some(name) = s.name
+                && name.to_lowercase().contains(&params.query.to_lowercase()) {
                     results.push(LocationResponse {
                         id: s.id,
                         name,
@@ -78,15 +77,14 @@ pub(crate) async fn search_locations(
                         state_id: Some(s.id),
                     });
                 }
-            }
         }
     }
 
     // Search cities (limited to top 50 for performance in this simple impl)
     if let Ok(cities) = LocationService::get_cities(&state.db, None, None).await {
         for c in cities {
-            if let Some(name) = c.name {
-                if name.to_lowercase().contains(&params.query.to_lowercase()) {
+            if let Some(name) = c.name
+                && name.to_lowercase().contains(&params.query.to_lowercase()) {
                     results.push(LocationResponse {
                         id: c.id,
                         name,
@@ -95,7 +93,6 @@ pub(crate) async fn search_locations(
                         state_id: c.state_id,
                     });
                 }
-            }
             if results.len() > 100 { break; }
         }
     }

@@ -27,6 +27,7 @@ pub struct AlbumSummary {
 
 impl AlbumSummary {
     /// Create a new album summary.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: u32,
         name: Option<String>,

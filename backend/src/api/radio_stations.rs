@@ -7,9 +7,9 @@ use axum::{
 };
 use crate::services::radio_station_service::{RadioStationService, RadioStationFilterParams, MergeRadioStationsRequest};
 use crate::services::types::{PaginatedResponse, SimilarityParams, SimilarResult};
+use crate::views::ApiError;
 use crate::job_state::AppState;
 use crate::models::radio_stations::Model as RadioStation;
-use sea_orm::DbErr;
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -39,7 +39,7 @@ pub(crate) async fn get_similar_radio_stations(
 ) -> impl IntoResponse {
     match RadioStationService::get_similar_radio_stations(&state.db, params).await {
         Ok(stations) => (StatusCode::OK, Json(stations)).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -60,7 +60,7 @@ pub(crate) async fn get_radio_stations(
 ) -> impl IntoResponse {
     match RadioStationService::get_radio_stations(&state.db, params).await {
         Ok(paginated) => (StatusCode::OK, Json(paginated)).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -76,7 +76,7 @@ pub(crate) async fn get_radio_stations(
 pub(crate) async fn create_radio_station(State(state): State<AppState>, Json(data): Json<RadioStation>) -> impl IntoResponse {
     match RadioStationService::create_radio_station(&state.db, data).await {
         Ok(station) => (StatusCode::CREATED, Json(station)).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -95,8 +95,8 @@ pub(crate) async fn create_radio_station(State(state): State<AppState>, Json(dat
 pub(crate) async fn get_radio_station(State(state): State<AppState>, Path(id): Path<u32>) -> impl IntoResponse {
     match RadioStationService::get_radio_station_by_id(&state.db, id).await {
         Ok(Some(station)) => (StatusCode::OK, Json(station)).into_response(),
-        Ok(None) => (StatusCode::NOT_FOUND, "Radio station not found").into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Ok(None) => ApiError::not_found("Radio station").into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -120,8 +120,7 @@ pub(crate) async fn update_radio_station(
 ) -> impl IntoResponse {
     match RadioStationService::update_radio_station(&state.db, id, data).await {
         Ok(station) => (StatusCode::OK, Json(station)).into_response(),
-        Err(DbErr::RecordNotFound(msg)) => (StatusCode::NOT_FOUND, msg).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -139,7 +138,7 @@ pub(crate) async fn update_radio_station(
 pub(crate) async fn delete_radio_station(State(state): State<AppState>, Path(id): Path<u32>) -> impl IntoResponse {
     match RadioStationService::delete_radio_station(&state.db, id).await {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -150,6 +149,6 @@ pub(crate) async fn merge_radio_stations(State(state): State<AppState>, Json(req
 
     match RadioStationService::merge_radio_stations(&state.db, req, user_id, ip_address).await {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }

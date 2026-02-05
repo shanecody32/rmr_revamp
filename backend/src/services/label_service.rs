@@ -76,8 +76,8 @@ impl LabelService {
 
         let mut query = Label::find();
 
-        if let Some(name) = params.name {
-            if !name.is_empty() {
+        if let Some(name) = params.name
+            && !name.is_empty() {
                 match params.name_filter_type.as_deref() {
                     Some("starts_with") => {
                         query = query.filter(LabelColumn::Name.starts_with(&name));
@@ -93,7 +93,6 @@ impl LabelService {
                     }
                 }
             }
-        }
 
         if let Some(sort_field) = params.sort_field {
             let order = if params.sort_ascending.unwrap_or(true) {
@@ -192,11 +191,10 @@ impl LabelService {
         let updated = active_model.update(db).await?;
 
         // Regenerate alias if name changed
-        if name_changed {
-            if let Some(name) = &data.name {
+        if name_changed
+            && let Some(name) = &data.name {
                 Self::create_label_alias(db, id, name).await?;
             }
-        }
 
         let responses = Self::to_label_responses(db, vec![updated]).await?;
         Ok(responses.into_iter().next().unwrap())
@@ -328,7 +326,7 @@ impl LabelService {
         for term in &search_terms {
             conditions = conditions
                 .add(LabelColumn::Name.contains(term))
-                .add(LabelColumn::Slug.contains(&crate::utils::slug::slug_it(term)));
+                .add(LabelColumn::Slug.contains(crate::utils::slug::slug_it(term)));
         }
         conditions = conditions.add(LabelColumn::Slug.eq(crate::utils::slug::slug_it(search_term)));
 

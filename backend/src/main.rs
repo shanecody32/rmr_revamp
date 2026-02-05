@@ -3,6 +3,8 @@ use dotenvy::dotenv;
 use std::env;
 use std::net::SocketAddr;
 use tower_http::cors::{Any, CorsLayer};
+use tower_http::compression::CompressionLayer;
+use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -42,6 +44,8 @@ async fn main() {
         .allow_headers(Any);
 
     let app = api::create_router(state)
+        .layer(CompressionLayer::new())
+        .layer(TraceLayer::new_for_http())
         .layer(cors);
 
     let host = env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());

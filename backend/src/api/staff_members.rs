@@ -14,7 +14,6 @@ use crate::views::staff::{StaffDetailView, StaffListViewEnriched};
 use crate::views::{ApiError, ApiResponse};
 use crate::job_state::AppState;
 use crate::models::staff_members::Model as StaffMemberModel;
-use crate::utils::error::handle_internal_error;
 use sea_orm::DbErr;
 
 pub fn router() -> Router<AppState> {
@@ -53,7 +52,7 @@ pub(crate) async fn get_staff_members(
 ) -> impl IntoResponse {
     match StaffService::get_staff_members(&state.db, params).await {
         Ok(paginated) => (StatusCode::OK, Json(paginated)).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -76,7 +75,7 @@ pub(crate) async fn get_staff_members_list(
 ) -> impl IntoResponse {
     match StaffService::get_staff_members_list(&state.db, params).await {
         Ok(paginated) => ApiResponse::ok(paginated).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -96,7 +95,7 @@ pub(crate) async fn create_staff_member(
 ) -> impl IntoResponse {
     match StaffService::create_staff_member(&state.db, data).await {
         Ok(staff) => (StatusCode::CREATED, Json(staff)).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -116,7 +115,7 @@ pub(crate) async fn get_similar_staff_members(
 ) -> impl IntoResponse {
     match StaffService::get_similar_staff_members(&state.db, params).await {
         Ok(results) => (StatusCode::OK, Json(results)).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -149,7 +148,7 @@ pub(crate) async fn merge_staff_members(
         Err(DbErr::RecordNotFound(msg)) => {
             ApiError::not_found(&msg).into_response()
         }
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -177,7 +176,7 @@ pub(crate) async fn get_staff_member(
     match StaffService::get_staff_member_by_id(&state.db, id, params).await {
         Ok(Some(staff)) => (StatusCode::OK, Json(staff)).into_response(),
         Ok(None) => ApiError::not_found("Staff member").into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -206,7 +205,7 @@ pub(crate) async fn get_staff_member_detail(
     match StaffService::get_staff_member_by_id(&state.db, id, params).await {
         Ok(Some(staff)) => ApiResponse::ok(staff).into_response(),
         Ok(None) => ApiError::not_found("Staff member").into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -232,7 +231,7 @@ pub(crate) async fn update_staff_member(
     match StaffService::update_staff_member(&state.db, id, data).await {
         Ok(staff) => (StatusCode::OK, Json(staff)).into_response(),
         Err(DbErr::RecordNotFound(msg)) => ApiError::not_found(&msg).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -254,7 +253,7 @@ pub(crate) async fn delete_staff_member(
 ) -> impl IntoResponse {
     match StaffService::delete_staff_member(&state.db, id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -285,7 +284,7 @@ pub(crate) async fn transfer_staff_member(
     match StaffService::transfer_to_station(&state.db, req, None, None).await {
         Ok(result) => ApiResponse::ok(result).into_response(),
         Err(DbErr::RecordNotFound(msg)) => ApiError::not_found(&msg).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -312,7 +311,7 @@ pub(crate) async fn archive_staff_member(
     match StaffService::archive_staff_member(&state.db, id, &req.reason, None, None).await {
         Ok(staff) => ApiResponse::ok(staff).into_response(),
         Err(DbErr::RecordNotFound(msg)) => ApiError::not_found(&msg).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -337,7 +336,7 @@ pub(crate) async fn unarchive_staff_member(
     match StaffService::unarchive_staff_member(&state.db, id, None, None).await {
         Ok(staff) => ApiResponse::ok(staff).into_response(),
         Err(DbErr::RecordNotFound(msg)) => ApiError::not_found(&msg).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -361,6 +360,6 @@ pub(crate) async fn recalculate_genres(
 ) -> impl IntoResponse {
     match StaffService::recalculate_sub_genres(&state.db, id).await {
         Ok(genre_ids) => ApiResponse::ok(genre_ids).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }

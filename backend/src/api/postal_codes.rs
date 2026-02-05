@@ -7,6 +7,7 @@ use axum::{
 };
 use crate::services::location_service::LocationService;
 use crate::services::types::{SimilarityParams, SimilarResult};
+use crate::views::ApiError;
 use crate::job_state::AppState;
 use crate::models::postal_codes::Model as PostalCode;
 
@@ -32,6 +33,6 @@ pub(crate) async fn get_similar_postal_codes(
 ) -> impl IntoResponse {
     match LocationService::get_similar_postal_codes(&state.db, params).await {
         Ok(results) => (StatusCode::OK, Json(results)).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }

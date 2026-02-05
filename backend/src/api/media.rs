@@ -10,7 +10,9 @@ use serde::Deserialize;
 use crate::config::static_files::StaticFileMode;
 use crate::job_state::AppState;
 
+/// Parameters for thumbnail generation (future feature).
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)] // Fields reserved for future thumbnail resizing feature
 pub struct ThumbnailParams {
     pub w: Option<u32>,
     pub h: Option<u32>,
@@ -63,8 +65,8 @@ async fn serve_fallback(state: &AppState) -> MediaResult {
     // In proxy mode, fetch the remote fallback
     if let Some(ref base_url) = state.static_config.proxy_base_url {
         let url = format!("{}/no_image.jpg", base_url);
-        if let Ok(response) = state.http_client.get(&url).send().await {
-            if response.status().is_success() {
+        if let Ok(response) = state.http_client.get(&url).send().await
+            && response.status().is_success() {
                 let content_type = response
                     .headers()
                     .get(header::CONTENT_TYPE)
@@ -75,7 +77,6 @@ async fn serve_fallback(state: &AppState) -> MediaResult {
                     return Ok(build_response(bytes.to_vec(), &content_type));
                 }
             }
-        }
     }
 
     // Last resort: return a transparent 1x1 pixel GIF

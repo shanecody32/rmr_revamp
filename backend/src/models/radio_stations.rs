@@ -27,6 +27,31 @@ pub struct Model {
     pub imported_from_file: i8,
     pub created: Option<DateTime>,
     pub modified: Option<DateTime>,
+
+    // New status fields
+    /// Data status: "new", "validated", "needs_review", "duplicate_detected"
+    pub data_status: String,
+    /// Reason for data status change
+    pub data_status_reason: Option<String>,
+    /// Note about data status
+    #[sea_orm(column_type = "Text", nullable)]
+    pub data_status_note: Option<String>,
+    /// When data status was last changed
+    pub data_status_at: Option<DateTime>,
+    /// User who changed data status
+    pub data_status_by: Option<u32>,
+
+    /// Chart status: "pending", "approved", "denied", "suspended"
+    pub chart_status: String,
+    /// Reason for chart denial: "duplicate", "terms_violation", "editorial", "spam", "other"
+    pub chart_denial_reason: Option<String>,
+    /// Note about chart status
+    #[sea_orm(column_type = "Text", nullable)]
+    pub chart_status_note: Option<String>,
+    /// When chart status was last changed
+    pub chart_status_at: Option<DateTime>,
+    /// User who changed chart status
+    pub chart_status_by: Option<u32>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -71,6 +96,18 @@ pub enum Relation {
     RadioStationsSubGenres,
     #[sea_orm(has_many = "super::radio_stations_users::Entity")]
     RadioStationsUsers,
+    #[sea_orm(
+        belongs_to = "super::users::Entity",
+        from = "Column::DataStatusBy",
+        to = "super::users::Column::Id"
+    )]
+    DataStatusUser,
+    #[sea_orm(
+        belongs_to = "super::users::Entity",
+        from = "Column::ChartStatusBy",
+        to = "super::users::Column::Id"
+    )]
+    ChartStatusUser,
 }
 
 impl Related<super::sub_genres::Entity> for Entity {

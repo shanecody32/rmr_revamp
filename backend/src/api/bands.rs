@@ -5,16 +5,14 @@ use axum::{
     routing::{get, post, put},
     Json, Router,
 };
-use crate::services::band_service::{BandService, BandFilterParams, MergeBandsRequest, BandResponse, MergeResult};
-use crate::services::album_service::AlbumResponse;
+use crate::services::{BandService, BandFilterParams, MergeBandsRequest, BandResponse, MergeResult};
+use crate::services::{AlbumResponse, AlbumService};
 use crate::services::types::{PaginatedResponse, SimilarityParams, SimilarResult};
 use crate::views::band::{BandListViewEnriched, BandDetailView};
 use crate::views::album::AlbumSummary;
-use crate::views::{ApiResponse, ApiError};
+use crate::views::{ApiResponse, ApiError, CACHE_DETAIL};
 use crate::job_state::AppState;
 use crate::models::bands::Model as Band;
-use crate::utils::error::handle_internal_error;
-use sea_orm::DbErr;
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
@@ -48,6 +46,7 @@ pub fn router() -> Router<AppState> {
         .route("/{id}", put(update_band))
         .route("/{id}/discography", get(get_band_discography))
         .route("/{id}/discography/summary", get(get_band_discography_summary))
+        .route("/{id}/unknown-album", get(get_or_create_unknown_album))
 }
 
 /// List bands with full response (backward compatible).
@@ -71,7 +70,7 @@ pub(crate) async fn get_bands(
 ) -> impl IntoResponse {
     match BandService::get_bands(&state.db, params).await {
         Ok(paginated) => (StatusCode::OK, Json(paginated)).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -96,7 +95,7 @@ pub(crate) async fn get_bands_list(
 ) -> impl IntoResponse {
     match BandService::get_bands_list(&state.db, params).await {
         Ok(paginated) => ApiResponse::ok(paginated).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -112,7 +111,7 @@ pub(crate) async fn get_bands_list(
 pub(crate) async fn create_band(State(state): State<AppState>, Json(data): Json<Band>) -> impl IntoResponse {
     match BandService::create_band(&state.db, data).await {
         Ok(band) => (StatusCode::CREATED, Json(band)).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -133,7 +132,7 @@ pub(crate) async fn get_similar_bands(
 ) -> impl IntoResponse {
     match BandService::get_similar_bands(&state.db, params).await {
         Ok(bands) => (StatusCode::OK, Json(bands)).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -153,7 +152,7 @@ pub(crate) async fn merge_bands(State(state): State<AppState>, Json(req): Json<M
 
     match BandService::merge_bands(&state.db, req, user_id, ip_address).await {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -176,8 +175,8 @@ pub(crate) async fn merge_bands(State(state): State<AppState>, Json(req): Json<M
 pub(crate) async fn get_band(State(state): State<AppState>, Path(id): Path<u32>) -> impl IntoResponse {
     match BandService::get_band_by_id(&state.db, id).await {
         Ok(Some(band)) => (StatusCode::OK, Json(band)).into_response(),
-        Ok(None) => (StatusCode::NOT_FOUND, "Band not found").into_response(),
-        Err(e) => handle_internal_error(e),
+        Ok(None) => ApiError::not_found("Band").into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -207,9 +206,9 @@ pub(crate) async fn get_band_detail(
     let include_albums = params.include_albums.unwrap_or(false);
 
     match BandService::get_band_by_id_detailed(&state.db, id, include_albums).await {
-        Ok(Some(band)) => ApiResponse::ok(band).into_response(),
+        Ok(Some(band)) => ApiResponse::ok(band).into_cached_response(CACHE_DETAIL),
         Ok(None) => ApiError::not_found("Band").into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -233,8 +232,7 @@ pub(crate) async fn update_band(
 ) -> impl IntoResponse {
     match BandService::update_band(&state.db, id, data).await {
         Ok(band) => (StatusCode::OK, Json(band)).into_response(),
-        Err(DbErr::RecordNotFound(msg)) => (StatusCode::NOT_FOUND, msg).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -255,7 +253,7 @@ pub(crate) async fn update_band(
 pub(crate) async fn get_band_discography(State(state): State<AppState>, Path(id): Path<u32>) -> impl IntoResponse {
     match BandService::get_band_discography(&state.db, id).await {
         Ok(albums) => (StatusCode::OK, Json(BandDiscographyResponse { albums })).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -281,6 +279,39 @@ pub(crate) async fn get_band_discography_summary(
 ) -> impl IntoResponse {
     match BandService::get_band_discography_summary(&state.db, id).await {
         Ok(albums) => ApiResponse::ok(BandDiscographySummaryResponse { albums }).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
+    }
+}
+
+/// Get or create an "Unknown" album for a band.
+///
+/// Returns an existing "Unknown" album if one exists for this band,
+/// otherwise creates a new one with proper aliases and band association.
+#[utoipa::path(
+    get,
+    path = "/bands/{id}/unknown-album",
+    params(
+        ("id" = i32, Path, description = "Band database id")
+    ),
+    responses(
+        (status = 200, description = "Unknown album found or created", body = crate::models::albums::Model),
+        (status = 404, description = "Band not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub(crate) async fn get_or_create_unknown_album(
+    State(state): State<AppState>,
+    Path(band_id): Path<u32>,
+) -> impl IntoResponse {
+    // First verify the band exists
+    match BandService::get_band_by_id(&state.db, band_id).await {
+        Ok(None) => return ApiError::not_found("Band").into_response(),
+        Err(e) => return ApiError::from(e).into_response(),
+        Ok(Some(_)) => {}
+    }
+
+    match AlbumService::get_or_create_unknown_album(&state.db, band_id).await {
+        Ok(album) => (StatusCode::OK, Json(album)).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }

@@ -5,6 +5,11 @@ import {nameFilterTypeMap} from '@/types/api/common';
 
 import {api} from './config';
 
+export const fetchRadioStationById = async (id: number): Promise<RadioStationResponse> => {
+    const response = await api.get<RadioStationResponse>(`/radio_stations/${id}`);
+    return response.data;
+};
+
 export const fetchRadioStations = async (params: ApiParams): Promise<{
     data: RadioStationResponse[];
     pagination: PaginationResponse

@@ -32,8 +32,8 @@ use crate::models::staff_member_duplicate_candidates::{
     Entity as StaffMemberDuplicateCandidate,
 };
 use crate::models::staff_members::{Column as StaffMemberColumn, Entity as StaffMember};
-use crate::services::album_service::AlbumService;
-use crate::services::band_service::BandService;
+use crate::services::AlbumService;
+use crate::services::BandService;
 use crate::services::duplicate_scan_service::{
     CandidateFilterParams, EntitySummary, GenericCandidate,
 };
@@ -284,7 +284,7 @@ impl DuplicateScanEntity for BandScanEntity {
             ..Default::default()
         };
         let results = BandService::get_similar_bands(db, params).await?;
-        Ok(results.into_iter().map(|r| (r.model.band.id, r.similarity_score)).collect())
+        Ok(results.into_iter().map(|r| (r.model.band.id, r.similarity_score)).collect::<Vec<_>>())
     }
 
     async fn get_existing_pairs(db: &DatabaseConnection, ids: &[u32]) -> Result<HashSet<(u32, u32)>, DbErr> {

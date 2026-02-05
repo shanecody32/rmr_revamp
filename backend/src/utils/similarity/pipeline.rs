@@ -182,17 +182,13 @@ where
             let db_name = get_name(&model).to_lowercase();
             let sanitized_db_name = sanitize_name(&db_name);
 
-            if let Some(score) = calculate_similarity_score(
+            calculate_similarity_score(
                 sanitized_name,
                 &sanitized_db_name,
                 jw_weight,
                 dice_weight,
                 min_score,
-            ) {
-                Some((model, score))
-            } else {
-                None
-            }
+            ).map(|score| (model, score))
         }
     }))
     .buffer_unordered(buffer_size)

@@ -313,13 +313,13 @@ fn handle_dollar_signs(slug: &str) -> String {
         })
         .to_string();
     // Replace dollar signs after words (e.g., "apple$" -> "apple-dollar")
-    let final_slug = RE_DOLLAR_AFTER_WORD
+    
+    RE_DOLLAR_AFTER_WORD
         .replace_all(&cleaned_slug, |caps: &regex::Captures| {
             let word = &caps[1];
             format!("{}-dollar", word)
         })
-        .to_string();
-    final_slug
+        .to_string()
 }
 
 #[cfg(test)]

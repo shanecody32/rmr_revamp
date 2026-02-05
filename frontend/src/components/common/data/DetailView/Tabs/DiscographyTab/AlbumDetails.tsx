@@ -1,6 +1,7 @@
 'use client'
 
 import {Typography} from 'antd';
+import {memo} from 'react';
 
 import {formatDate} from '@/lib/utils';
 
@@ -13,7 +14,7 @@ interface AlbumDetailsProps {
     itunesUrl?: string;
 }
 
-export default function AlbumDetails({
+const AlbumDetails = memo(function AlbumDetails({
                                          name,
                                          releaseDate,
                                          label,
@@ -45,4 +46,6 @@ export default function AlbumDetails({
             </div>
         </div>
     );
-}
+});
+
+export default AlbumDetails;

@@ -62,6 +62,14 @@ api.interceptors.request.use(
 // Add response interceptor to handle error responses
 api.interceptors.response.use(
     (response) => {
+        // Check if response status indicates an error (4xx range that validateStatus let through)
+        if (response.status >= 400) {
+            return Promise.reject({
+                status: response.status,
+                message: response.data?.message || response.data?.error || `Request failed with status ${response.status}`,
+                details: response.data?.details || response.data
+            });
+        }
         // Simply return the response as-is, don't modify pagination
         return response;
     },

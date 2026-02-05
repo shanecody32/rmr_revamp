@@ -106,9 +106,9 @@ export default function SongsPageContent() {
             const filtered = similar.filter(s => s.id !== song.id);
             setSimilarSongs(filtered);
 
-            // If no similar songs found and not forced, go directly to edit page
+            // If no similar songs found and not forced, go directly to validation page
             if (!forceModal && filtered.length === 0) {
-                router.push(`/songs/edit/${song.id}/${song.slug}`);
+                router.push(`/system/validation/song/${song.id}/${song.slug}`);
                 return;
             }
 
@@ -137,10 +137,10 @@ export default function SongsPageContent() {
         setSimilarSongsModalOpen(false);
     };
 
-    // Handle proceeding without merging — go to edit page
+    // Handle proceeding without merging — go to validation page
     const handleProceedWithoutMerge = () => {
         if (!songToVerify) return;
-        router.push(`/songs/edit/${songToVerify.id}/${songToVerify.slug}`);
+        router.push(`/system/validation/song/${songToVerify.id}/${songToVerify.slug}`);
         setSimilarSongsModalOpen(false);
     };
 

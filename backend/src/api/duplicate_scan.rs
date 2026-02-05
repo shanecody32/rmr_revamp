@@ -5,6 +5,8 @@ use axum::{
     routing::{get, post, put},
     Json, Router,
 };
+use sea_orm::DbErr;
+use crate::views::ApiError;
 use crate::job_state::AppState;
 use crate::models::band_duplicate_candidates::CandidateStatus;
 use crate::models::duplicate_scan_state::ScanEntityType;
@@ -13,10 +15,8 @@ use crate::services::duplicate_scan_service::{
     GroupedDuplicateResponse, ScanStateResponse, StartScanRequest,
 };
 use crate::services::types::PaginatedResponse;
-use crate::utils::error::handle_internal_error;
 use serde::Deserialize;
 use utoipa::ToSchema;
-use sea_orm::DbErr;
 use tokio_util::sync::CancellationToken;
 
 pub fn router() -> Router<AppState> {
@@ -61,7 +61,7 @@ pub(crate) async fn get_scan_state(
     };
     match DuplicateScanService::get_scan_state(&state.db, &et).await {
         Ok(scan_state) => (StatusCode::OK, Json(scan_state)).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -118,7 +118,7 @@ pub(crate) async fn start_scan(
         Err(DbErr::Custom(msg)) if msg.contains("already running") => {
             (StatusCode::BAD_REQUEST, msg).into_response()
         }
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -155,7 +155,7 @@ pub(crate) async fn stop_scan(
             state.set_scan_running(&et.to_string(), false).await;
             (StatusCode::OK, Json(scan_state)).into_response()
         }
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -193,7 +193,7 @@ pub(crate) async fn clear_candidates(
             Json(serde_json::json!({ "deleted": count })),
         )
             .into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -221,7 +221,7 @@ pub(crate) async fn get_candidates_grouped(
     };
     match DuplicateScanService::get_candidates_grouped(&state.db, &et, params).await {
         Ok(paginated) => (StatusCode::OK, Json(paginated)).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -259,7 +259,7 @@ pub(crate) async fn update_candidate_status(
         .await
     {
         Ok(()) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -286,7 +286,7 @@ pub(crate) async fn restore_candidate(
     };
     match DuplicateScanService::restore_candidate(&state.db, &et, id).await {
         Ok(()) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -313,7 +313,7 @@ pub(crate) async fn get_entity_matches(
     };
     match DuplicateScanService::get_entity_matches(&state.db, &et, id).await {
         Ok(matches) => (StatusCode::OK, Json(matches)).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -330,6 +330,6 @@ pub(crate) async fn get_summary(
 ) -> impl IntoResponse {
     match DuplicateScanService::get_pending_summary(&state.db).await {
         Ok(summary) => (StatusCode::OK, Json(summary)).into_response(),
-        Err(e) => handle_internal_error(e),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }

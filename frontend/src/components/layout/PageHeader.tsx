@@ -55,8 +55,8 @@ function PageHeaderInner({
     const contextualBreadcrumbs = breadcrumbs || (nav.hasContext && entityName ? buildContextualBreadcrumbs(nav, entityName, actionName, entityId, entitySlug) : undefined);
 
     return (
-        <div className="mb-6">
-            <div className="mb-2">
+        <div className="mb-2">
+            <div className="mb-1">
                 <Breadcrumbs
                     items={contextualBreadcrumbs}
                     entityName={!contextualBreadcrumbs ? entityName : undefined}
@@ -158,8 +158,8 @@ function buildContextualBreadcrumbs(
 export default function PageHeader(props: PageHeaderProps) {
     return (
         <Suspense fallback={
-            <div className="mb-6">
-                <div className="mb-2">
+            <div className="mb-2">
+                <div className="mb-1">
                     <Breadcrumbs
                         entityName={props.entityName}
                         actionName={props.actionName}

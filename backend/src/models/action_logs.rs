@@ -65,6 +65,16 @@ pub mod action_types {
     pub const SONG_MERGE: &str = "song.merge";
     pub const RADIO_STATION_MERGE: &str = "radio_station.merge";
     pub const LABEL_MERGE: &str = "label.merge";
+
+    // Transfer operations
+    pub const SONG_TRANSFER_ALBUM: &str = "song.transfer_album";
+    pub const SONG_TRANSFER_BAND: &str = "song.transfer_band";
+    pub const SONG_REMOVE_FROM_ALBUM: &str = "song.remove_from_album";
+    pub const ALBUM_TRANSFER_BAND: &str = "album.transfer_band";
+
+    // Status changes
+    pub const DATA_STATUS_CHANGE: &str = "entity.data_status_change";
+    pub const CHART_STATUS_CHANGE: &str = "entity.chart_status_change";
 }
 
 /// Common entity types

@@ -16,7 +16,7 @@ use crate::models::postal_codes::Model as PostalCode;
 use crate::models::band_images::Model as BandImage;
 use crate::api::locations::LocationResponse;
 use crate::services::auth_service::{LoginRequest, LoginResponse};
-use crate::services::band_service::{MergeBandsRequest};
+use crate::services::MergeBandsRequest;
 use crate::api::bands::{BandDiscographyResponse};
 use crate::api::band_images::{ReorderRequest, BandImageUpdate, ReorderUpdate};
 use crate::services::types::{PaginatedResponse, PaginationInfo, SimilarResult};

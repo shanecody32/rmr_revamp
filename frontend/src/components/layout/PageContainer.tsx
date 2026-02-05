@@ -8,7 +8,7 @@ interface PageContainerProps {
 
 export default function PageContainer({children}: PageContainerProps) {
     return (
-        <Layout.Content style={{padding: '24px'}}>
+        <Layout.Content style={{padding: '12px 16px'}}>
             {children}
         </Layout.Content>
     );

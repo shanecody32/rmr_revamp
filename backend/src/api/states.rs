@@ -7,6 +7,7 @@ use axum::{
 };
 use crate::services::location_service::LocationService;
 use crate::services::types::{PaginatedResponse, PaginationInfo, SimilarityParams, SimilarResult};
+use crate::views::ApiError;
 use crate::job_state::AppState;
 use crate::models::states::Model as StateModel;
 use serde::Deserialize;
@@ -36,7 +37,7 @@ pub(crate) async fn get_similar_states(
 ) -> impl IntoResponse {
     match LocationService::get_similar_states(&state.db, params).await {
         Ok(states) => (StatusCode::OK, Json(states)).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -97,12 +98,12 @@ pub(crate) async fn get_states(
                 pagination: PaginationInfo {
                     page,
                     page_size,
-                    total_pages: (total_items + page_size - 1) / page_size,
+                    total_pages: total_items.div_ceil(page_size),
                     total_items,
                 }
             })).into_response()
         },
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -121,6 +122,6 @@ pub(crate) async fn get_state(State(state): State<AppState>, Path(id): Path<u32>
     match LocationService::get_state_by_id(&state.db, id).await {
         Ok(Some(state_data)) => (StatusCode::OK, Json(state_data)).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, "State not found").into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }

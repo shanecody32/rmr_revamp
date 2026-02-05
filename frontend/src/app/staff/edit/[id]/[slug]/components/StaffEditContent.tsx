@@ -943,7 +943,7 @@ export default function StaffEditContent({id}: StaffEditContentProps) {
     ];
 
     return (
-        <div className="max-w-7xl mx-auto">
+        <div>
             {/* Archived Banner */}
             {isArchived && (
                 <Alert
@@ -978,6 +978,11 @@ export default function StaffEditContent({id}: StaffEditContentProps) {
                     title={`Editing: ${displayName}`}
                     extra={
                         <Space>
+                            <Link href={`/staff/view/${staff.id}/${staff.slug}/playlist/edit`}>
+                                <Button icon={<TagOutlined/>}>
+                                    Manage Playlist
+                                </Button>
+                            </Link>
                             <Button
                                 type="primary"
                                 icon={<SaveOutlined/>}

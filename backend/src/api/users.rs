@@ -6,6 +6,7 @@ use axum::{
     Json, Router,
 };
 use crate::services::user_service::UserService;
+use crate::views::ApiError;
 use crate::job_state::AppState;
 use crate::models::users::Model as User;
 
@@ -26,7 +27,7 @@ pub fn router() -> Router<AppState> {
 pub(crate) async fn get_users(State(state): State<AppState>) -> impl IntoResponse {
     match UserService::get_all_users(&state.db).await {
         Ok(users) => (StatusCode::OK, Json(users)).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -46,6 +47,6 @@ pub(crate) async fn get_user(State(state): State<AppState>, Path(id): Path<u32>)
     match UserService::get_user_by_id(&state.db, id).await {
         Ok(Some(user)) => (StatusCode::OK, Json(user)).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, "User not found").into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
