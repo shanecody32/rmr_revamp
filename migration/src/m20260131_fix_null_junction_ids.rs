@@ -29,6 +29,11 @@ impl MigrationTrait for Migration {
         ];
 
         for table in &junction_tables {
+            if !manager.has_table(*table).await? {
+                eprintln!("Skipping fix_null_junction_ids for {}: table does not exist", table);
+                continue;
+            }
+
             // Delete rows with NULL id
             let delete_sql = format!("DELETE FROM `{}` WHERE `id` IS NULL", table);
             let result = db.execute_unprepared(&delete_sql).await;

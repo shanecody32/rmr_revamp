@@ -6,7 +6,7 @@ use crate::models::staff_playlist_archives::{
 };
 use crate::models::staff_members::Entity as StaffMember;
 use crate::models::bands::{Entity as Band, Column as BandColumn};
-use crate::models::songs::{Entity as Song, Column as SongColumn, Model as SongModel};
+use crate::models::songs::{Entity as Song, Column as SongColumn};
 use crate::models::albums::{Entity as Album, Column as AlbumColumn};
 use crate::models::labels::{Entity as Label, Column as LabelColumn};
 use crate::models::sub_genres::{Entity as SubGenre, Column as SubGenreColumn};
@@ -21,6 +21,7 @@ use crate::models::album_duplicate_candidates::{
 };
 use crate::services::types::{PaginatedResponse, PaginationInfo};
 use sea_orm::*;
+use sea_orm::prelude::{DateTime, Date};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use std::collections::HashMap;
@@ -164,6 +165,45 @@ pub struct ArchiveWeek {
     pub week_ending: String,
 }
 
+/// Row struct for staff_playlists query results.
+/// Uses `FromQueryResult` (no table prefix) instead of `DeriveEntityModel`'s
+/// implementation which uses a table prefix that SeaORM 2.0-rc may not resolve correctly.
+#[derive(Debug, Clone, FromQueryResult)]
+struct PlaylistRow {
+    pub id: u32,
+    pub album_id: Option<u32>,
+    pub band_id: Option<u32>,
+    pub song_id: Option<u32>,
+    pub staff_member_id: Option<u32>,
+    pub user_id: Option<u32>,
+    pub spins: Option<i32>,
+    pub invalid: i8,
+    pub created: Option<DateTime>,
+    pub modified: Option<DateTime>,
+}
+
+/// Row struct for staff_playlist_archives query results.
+#[derive(Debug, Clone, FromQueryResult)]
+struct ArchiveRow {
+    pub id: u32,
+    pub album_id: Option<u32>,
+    pub band_id: Option<u32>,
+    pub song_id: Option<u32>,
+    pub staff_member_id: Option<u32>,
+    pub user_id: Option<u32>,
+    pub spins: Option<i32>,
+    pub invalid: i8,
+    pub week_ending: Option<Date>,
+    pub created: Option<DateTime>,
+    pub modified: Option<DateTime>,
+}
+
+/// Lightweight struct for song enrichment (avoids loading full Song model).
+struct SongInfo {
+    name: Option<String>,
+    sub_genre_id: Option<u32>,
+}
+
 pub struct StaffPlaylistService;
 
 impl StaffPlaylistService {
@@ -174,8 +214,20 @@ impl StaffPlaylistService {
         let page = params.page.unwrap_or(1);
         let page_size = params.page_size.unwrap_or(500).clamp(1, 1000);
 
+        // Filter out rows with NULL ids (the staff_playlists table lacks a proper
+        // primary key constraint, so some rows may have NULL id values)
+        let base_filter = Condition::all()
+            .add(StaffPlaylistColumn::StaffMemberId.eq(params.staff_member_id))
+            .add(StaffPlaylistColumn::Id.is_not_null());
+
+        let total_items = StaffPlaylist::find()
+            .filter(base_filter.clone())
+            .count(db)
+            .await?;
+        let total_pages = (total_items + page_size - 1) / page_size;
+
         let mut query = StaffPlaylist::find()
-            .filter(StaffPlaylistColumn::StaffMemberId.eq(params.staff_member_id));
+            .filter(base_filter);
 
         // Apply sorting
         if let Some(sort_field) = &params.sort_field {
@@ -193,11 +245,13 @@ impl StaffPlaylistService {
             query = query.order_by_desc(StaffPlaylistColumn::Id);
         }
 
-        let paginator = query.paginate(db, page_size);
-        let total_items = paginator.num_items().await?;
-        let total_pages = paginator.num_pages().await?;
-
-        let entries = paginator.fetch_page(page - 1).await?;
+        let offset = (page - 1) * page_size;
+        let entries = query
+            .offset(offset)
+            .limit(page_size)
+            .into_model::<PlaylistRow>()
+            .all(db)
+            .await?;
         let mut results = Self::enrich_playlist_entries(db, &entries).await?;
 
         // Apply name filters after enrichment (post-filter since we join in memory)
@@ -241,10 +295,16 @@ impl StaffPlaylistService {
             song_id: Set(Some(data.song_id)),
             album_id: Set(data.album_id),
             spins: Set(data.spins),
+            invalid: Set(0),
             ..Default::default()
         };
 
-        let entry = active_model.insert(db).await?;
+        let insert_result = StaffPlaylist::insert(active_model).exec(db).await?;
+        let entry = StaffPlaylist::find_by_id(insert_result.last_insert_id)
+            .into_model::<PlaylistRow>()
+            .one(db)
+            .await?
+            .ok_or(DbErr::RecordNotFound("Inserted entry not found".to_string()))?;
         let results = Self::enrich_playlist_entries(db, &[entry]).await?;
         Ok(results.into_iter().next().unwrap())
     }
@@ -254,17 +314,26 @@ impl StaffPlaylistService {
         entry_id: u32,
         spins: Option<i32>,
     ) -> Result<PlaylistEntryResponse, DbErr> {
-        let entry = StaffPlaylist::find_by_id(entry_id)
+        let existing = StaffPlaylist::find_by_id(entry_id)
+            .into_model::<PlaylistRow>()
             .one(db)
             .await?
             .ok_or(DbErr::RecordNotFound(
                 "Playlist entry not found".to_string(),
             ))?;
 
-        let mut active: crate::models::staff_playlists::ActiveModel = entry.into();
-        active.spins = Set(spins);
-        let updated = active.update(db).await?;
+        let active = crate::models::staff_playlists::ActiveModel {
+            id: Unchanged(existing.id),
+            spins: Set(spins),
+            ..Default::default()
+        };
+        StaffPlaylist::update(active).exec(db).await?;
 
+        let updated = StaffPlaylist::find_by_id(entry_id)
+            .into_model::<PlaylistRow>()
+            .one(db)
+            .await?
+            .ok_or(DbErr::RecordNotFound("Updated entry not found".to_string()))?;
         let results = Self::enrich_playlist_entries(db, &[updated]).await?;
         Ok(results.into_iter().next().unwrap())
     }
@@ -275,11 +344,17 @@ impl StaffPlaylistService {
     ) -> Result<u32, DbErr> {
         let mut count = 0u32;
         for update in updates {
-            let entry = StaffPlaylist::find_by_id(update.id).one(db).await?;
-            if let Some(entry) = entry {
-                let mut active: crate::models::staff_playlists::ActiveModel = entry.into();
-                active.spins = Set(update.spins);
-                active.update(db).await?;
+            let exists = StaffPlaylist::find_by_id(update.id)
+                .into_model::<PlaylistRow>()
+                .one(db)
+                .await?;
+            if exists.is_some() {
+                let active = crate::models::staff_playlists::ActiveModel {
+                    id: Unchanged(update.id),
+                    spins: Set(update.spins),
+                    ..Default::default()
+                };
+                StaffPlaylist::update(active).exec(db).await?;
                 count += 1;
             }
         }
@@ -316,6 +391,7 @@ impl StaffPlaylistService {
         params: CheckDuplicateParams,
     ) -> Result<Option<PlaylistEntryResponse>, DbErr> {
         let mut query = StaffPlaylist::find()
+            .filter(StaffPlaylistColumn::Id.is_not_null())
             .filter(StaffPlaylistColumn::StaffMemberId.eq(params.staff_member_id))
             .filter(StaffPlaylistColumn::BandId.eq(params.band_id))
             .filter(StaffPlaylistColumn::SongId.eq(params.song_id));
@@ -326,7 +402,7 @@ impl StaffPlaylistService {
             query = query.filter(StaffPlaylistColumn::AlbumId.is_null());
         }
 
-        let entry = query.one(db).await?;
+        let entry = query.into_model::<PlaylistRow>().one(db).await?;
         match entry {
             Some(entry) => {
                 let results = Self::enrich_playlist_entries(db, &[entry]).await?;
@@ -410,18 +486,27 @@ impl StaffPlaylistService {
         entry_id: u32,
         additional_spins: i32,
     ) -> Result<PlaylistEntryResponse, DbErr> {
-        let entry = StaffPlaylist::find_by_id(entry_id)
+        let existing = StaffPlaylist::find_by_id(entry_id)
+            .into_model::<PlaylistRow>()
             .one(db)
             .await?
             .ok_or(DbErr::RecordNotFound(
                 "Playlist entry not found".to_string(),
             ))?;
 
-        let current_spins = entry.spins.unwrap_or(0);
-        let mut active: crate::models::staff_playlists::ActiveModel = entry.into();
-        active.spins = Set(Some(current_spins + additional_spins));
-        let updated = active.update(db).await?;
+        let current_spins = existing.spins.unwrap_or(0);
+        let active = crate::models::staff_playlists::ActiveModel {
+            id: Unchanged(existing.id),
+            spins: Set(Some(current_spins + additional_spins)),
+            ..Default::default()
+        };
+        StaffPlaylist::update(active).exec(db).await?;
 
+        let updated = StaffPlaylist::find_by_id(entry_id)
+            .into_model::<PlaylistRow>()
+            .one(db)
+            .await?
+            .ok_or(DbErr::RecordNotFound("Updated entry not found".to_string()))?;
         let results = Self::enrich_playlist_entries(db, &[updated]).await?;
         Ok(results.into_iter().next().unwrap())
     }
@@ -438,11 +523,13 @@ impl StaffPlaylistService {
                 query = query.filter(StaffPlaylistArchiveColumn::WeekEnding.eq(date));
             }
 
-        let archives = query.all(db).await?;
+        let archives: Vec<ArchiveRow> = query.into_model::<ArchiveRow>().all(db).await?;
 
         // Load existing entries to skip duplicates
-        let existing = StaffPlaylist::find()
+        let existing: Vec<PlaylistRow> = StaffPlaylist::find()
+            .filter(StaffPlaylistColumn::Id.is_not_null())
             .filter(StaffPlaylistColumn::StaffMemberId.eq(req.staff_member_id))
+            .into_model::<PlaylistRow>()
             .all(db)
             .await?;
 
@@ -471,9 +558,10 @@ impl StaffPlaylistService {
                 album_id: Set(arch.album_id),
                 user_id: Set(arch.user_id),
                 spins: Set(spins),
+                invalid: Set(0),
                 ..Default::default()
             };
-            active.insert(db).await?;
+            StaffPlaylist::insert(active).exec(db).await?;
             imported += 1;
         }
 
@@ -487,25 +575,28 @@ impl StaffPlaylistService {
         db: &DatabaseConnection,
         staff_member_id: u32,
     ) -> Result<Vec<ArchiveWeek>, DbErr> {
-        // Use raw query for DISTINCT week_ending
-        let entries = StaffPlaylistArchive::find()
+        // Query distinct week_ending values
+        let rows: Vec<(Option<Date>,)> = StaffPlaylistArchive::find()
+            .select_only()
+            .column(StaffPlaylistArchiveColumn::WeekEnding)
             .filter(StaffPlaylistArchiveColumn::StaffMemberId.eq(staff_member_id))
             .filter(StaffPlaylistArchiveColumn::WeekEnding.is_not_null())
+            .into_tuple()
             .all(db)
             .await?;
 
-        let mut weeks: Vec<chrono::NaiveDate> = entries
-            .iter()
-            .filter_map(|e| e.week_ending)
+        let mut weeks: Vec<Date> = rows
+            .into_iter()
+            .filter_map(|(w,)| w)
             .collect::<std::collections::HashSet<_>>()
             .into_iter()
             .collect();
 
-        weeks.sort_by(|a, b| b.cmp(a)); // descending
+        weeks.sort_by(|a: &Date, b: &Date| b.cmp(a)); // descending
 
         Ok(weeks
             .into_iter()
-            .map(|w| ArchiveWeek {
+            .map(|w: Date| ArchiveWeek {
                 week_ending: w.format("%Y-%m-%d").to_string(),
             })
             .collect())
@@ -544,11 +635,19 @@ impl StaffPlaylistService {
             query = query.order_by_desc(StaffPlaylistArchiveColumn::Id);
         }
 
-        let paginator = query.paginate(db, page_size);
-        let total_items = paginator.num_items().await?;
-        let total_pages = paginator.num_pages().await?;
+        let total_items = StaffPlaylistArchive::find()
+            .filter(StaffPlaylistArchiveColumn::StaffMemberId.eq(params.staff_member_id))
+            .count(db)
+            .await?;
+        let total_pages = (total_items + page_size - 1) / page_size;
 
-        let entries = paginator.fetch_page(page - 1).await?;
+        let offset = (page - 1) * page_size;
+        let entries: Vec<ArchiveRow> = query
+            .offset(offset)
+            .limit(page_size)
+            .into_model::<ArchiveRow>()
+            .all(db)
+            .await?;
         let results = Self::enrich_archive_entries(db, &entries).await?;
 
         Ok(PaginatedResponse {
@@ -566,19 +665,22 @@ impl StaffPlaylistService {
         db: &DatabaseConnection,
         staff_member_id: u32,
     ) -> Result<(), DbErr> {
-        let staff = StaffMember::find_by_id(staff_member_id)
-            .one(db)
-            .await?
-            .ok_or(DbErr::RecordNotFound(
-                "Staff member not found".to_string(),
-            ))?;
+        let count = StaffMember::find_by_id(staff_member_id)
+            .count(db)
+            .await?;
+        if count == 0 {
+            return Err(DbErr::RecordNotFound("Staff member not found".to_string()));
+        }
 
-        let mut active: crate::models::staff_members::ActiveModel = staff.into();
-        active.playlist_finalised = Set(1);
-        active.reported = Set(1);
-        active.has_playlist = Set(1);
-        active.last_reported = Set(Some(chrono::Local::now().date_naive()));
-        active.update(db).await?;
+        let active = crate::models::staff_members::ActiveModel {
+            id: Unchanged(staff_member_id),
+            playlist_finalised: Set(1),
+            reported: Set(1),
+            has_playlist: Set(1),
+            last_reported: Set(Some(chrono::Local::now().date_naive())),
+            ..Default::default()
+        };
+        StaffMember::update(active).exec(db).await?;
         Ok(())
     }
 
@@ -586,16 +688,19 @@ impl StaffPlaylistService {
         db: &DatabaseConnection,
         staff_member_id: u32,
     ) -> Result<(), DbErr> {
-        let staff = StaffMember::find_by_id(staff_member_id)
-            .one(db)
-            .await?
-            .ok_or(DbErr::RecordNotFound(
-                "Staff member not found".to_string(),
-            ))?;
+        let count = StaffMember::find_by_id(staff_member_id)
+            .count(db)
+            .await?;
+        if count == 0 {
+            return Err(DbErr::RecordNotFound("Staff member not found".to_string()));
+        }
 
-        let mut active: crate::models::staff_members::ActiveModel = staff.into();
-        active.playlist_finalised = Set(0);
-        active.update(db).await?;
+        let active = crate::models::staff_members::ActiveModel {
+            id: Unchanged(staff_member_id),
+            playlist_finalised: Set(0),
+            ..Default::default()
+        };
+        StaffMember::update(active).exec(db).await?;
         Ok(())
     }
 
@@ -603,7 +708,7 @@ impl StaffPlaylistService {
 
     async fn enrich_playlist_entries(
         db: &DatabaseConnection,
-        entries: &[crate::models::staff_playlists::Model],
+        entries: &[PlaylistRow],
     ) -> Result<Vec<PlaylistEntryResponse>, DbErr> {
         if entries.is_empty() {
             return Ok(vec![]);
@@ -661,8 +766,8 @@ impl StaffPlaylistService {
                     sub_genre_name,
                     spins: entry.spins,
                     invalid: entry.invalid,
-                    created: entry.created.map(|d| d.to_string()),
-                    modified: entry.modified.map(|d| d.to_string()),
+                    created: entry.created.map(|d: DateTime| d.to_string()),
+                    modified: entry.modified.map(|d: DateTime| d.to_string()),
                 }
             })
             .collect())
@@ -670,7 +775,7 @@ impl StaffPlaylistService {
 
     async fn enrich_archive_entries(
         db: &DatabaseConnection,
-        entries: &[crate::models::staff_playlist_archives::Model],
+        entries: &[ArchiveRow],
     ) -> Result<Vec<ArchiveEntryResponse>, DbErr> {
         if entries.is_empty() {
             return Ok(vec![]);
@@ -724,9 +829,9 @@ impl StaffPlaylistService {
                     sub_genre_name,
                     spins: entry.spins,
                     invalid: entry.invalid,
-                    week_ending: entry.week_ending.map(|d| d.format("%Y-%m-%d").to_string()),
-                    created: entry.created.map(|d| d.to_string()),
-                    modified: entry.modified.map(|d| d.to_string()),
+                    week_ending: entry.week_ending.map(|d: Date| d.format("%Y-%m-%d").to_string()),
+                    created: entry.created.map(|d: DateTime| d.to_string()),
+                    modified: entry.modified.map(|d: DateTime| d.to_string()),
                 }
             })
             .collect())
@@ -739,25 +844,37 @@ impl StaffPlaylistService {
         if ids.is_empty() {
             return Ok(HashMap::new());
         }
-        let bands = Band::find()
+        let rows: Vec<(u32, String)> = Band::find()
+            .select_only()
+            .column(BandColumn::Id)
+            .column(BandColumn::Name)
             .filter(BandColumn::Id.is_in(ids.to_vec()))
+            .into_tuple()
             .all(db)
             .await?;
-        Ok(bands.into_iter().map(|b| (b.id, b.name)).collect())
+        Ok(rows.into_iter().collect())
     }
 
     async fn load_songs(
         db: &DatabaseConnection,
         ids: &[u32],
-    ) -> Result<HashMap<u32, SongModel>, DbErr> {
+    ) -> Result<HashMap<u32, SongInfo>, DbErr> {
         if ids.is_empty() {
             return Ok(HashMap::new());
         }
-        let songs = Song::find()
+        let rows: Vec<(u32, Option<String>, Option<u32>)> = Song::find()
+            .select_only()
+            .column(SongColumn::Id)
+            .column(SongColumn::Name)
+            .column(SongColumn::SubGenreId)
             .filter(SongColumn::Id.is_in(ids.to_vec()))
+            .into_tuple()
             .all(db)
             .await?;
-        Ok(songs.into_iter().map(|s| (s.id, s)).collect())
+        Ok(rows
+            .into_iter()
+            .map(|(id, name, sub_genre_id)| (id, SongInfo { name, sub_genre_id }))
+            .collect())
     }
 
     async fn load_sub_genre_names(
@@ -767,13 +884,17 @@ impl StaffPlaylistService {
         if ids.is_empty() {
             return Ok(HashMap::new());
         }
-        let sub_genres = SubGenre::find()
+        let rows: Vec<(u32, Option<String>)> = SubGenre::find()
+            .select_only()
+            .column(SubGenreColumn::Id)
+            .column(SubGenreColumn::Name)
             .filter(SubGenreColumn::Id.is_in(ids.to_vec()))
+            .into_tuple()
             .all(db)
             .await?;
-        Ok(sub_genres
+        Ok(rows
             .into_iter()
-            .filter_map(|sg| sg.name.map(|n| (sg.id, n)))
+            .filter_map(|(id, name)| name.map(|n| (id, n)))
             .collect())
     }
 
@@ -784,17 +905,22 @@ impl StaffPlaylistService {
         if ids.is_empty() {
             return Ok((HashMap::new(), HashMap::new()));
         }
-        let albums = Album::find()
+        let rows: Vec<(u32, Option<String>, Option<u32>)> = Album::find()
+            .select_only()
+            .column(AlbumColumn::Id)
+            .column(AlbumColumn::Name)
+            .column(AlbumColumn::LabelId)
             .filter(AlbumColumn::Id.is_in(ids.to_vec()))
+            .into_tuple()
             .all(db)
             .await?;
-        let names: HashMap<u32, String> = albums
+        let names: HashMap<u32, String> = rows
             .iter()
-            .filter_map(|a| a.name.clone().map(|n| (a.id, n)))
+            .filter_map(|(id, name, _)| name.as_ref().map(|n| (*id, n.clone())))
             .collect();
-        let label_ids: HashMap<u32, u32> = albums
-            .iter()
-            .filter_map(|a| a.label_id.map(|lid| (a.id, lid)))
+        let label_ids: HashMap<u32, u32> = rows
+            .into_iter()
+            .filter_map(|(id, _, lid)| lid.map(|l| (id, l)))
             .collect();
         Ok((names, label_ids))
     }
@@ -806,13 +932,17 @@ impl StaffPlaylistService {
         if ids.is_empty() {
             return Ok(HashMap::new());
         }
-        let labels = Label::find()
+        let rows: Vec<(u32, Option<String>)> = Label::find()
+            .select_only()
+            .column(LabelColumn::Id)
+            .column(LabelColumn::Name)
             .filter(LabelColumn::Id.is_in(ids.to_vec()))
+            .into_tuple()
             .all(db)
             .await?;
-        Ok(labels
+        Ok(rows
             .into_iter()
-            .filter_map(|l| l.name.map(|n| (l.id, n)))
+            .filter_map(|(id, name)| name.map(|n| (id, n)))
             .collect())
     }
 }

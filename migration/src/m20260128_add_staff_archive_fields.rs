@@ -6,116 +6,45 @@ pub struct Migration;
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        // Add archive-related columns to staff_members table
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(StaffMembers::Table)
-                    .add_column(
-                        ColumnDef::new(StaffMembers::Archived)
-                            .tiny_integer()
-                            .not_null()
-                            .default(0),
-                    )
-                    .to_owned(),
-            )
-            .await?;
+        if !manager.has_table("staff_members").await? {
+            eprintln!("Skipping add_staff_archive_fields: staff_members table does not exist");
+            return Ok(());
+        }
 
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(StaffMembers::Table)
-                    .add_column(
-                        ColumnDef::new(StaffMembers::ArchivedAt)
-                            .date_time()
-                            .null(),
-                    )
-                    .to_owned(),
-            )
-            .await?;
+        let db = manager.get_connection();
 
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(StaffMembers::Table)
-                    .add_column(
-                        ColumnDef::new(StaffMembers::ArchivedReason)
-                            .string_len(500)
-                            .null(),
-                    )
-                    .to_owned(),
-            )
-            .await?;
+        // Add archive-related columns (IF NOT EXISTS for idempotency)
+        let columns = [
+            ("archived", "TINYINT NOT NULL DEFAULT 0"),
+            ("archived_at", "DATETIME NULL"),
+            ("archived_reason", "VARCHAR(500) NULL"),
+            ("transferred_to_id", "INT UNSIGNED NULL"),
+            ("transferred_from_id", "INT UNSIGNED NULL"),
+            ("admin_editable", "TINYINT NOT NULL DEFAULT 0"),
+        ];
+        for (col, typedef) in columns {
+            db.execute_unprepared(&format!(
+                "ALTER TABLE `staff_members` ADD COLUMN IF NOT EXISTS `{}` {}",
+                col, typedef
+            )).await?;
+        }
 
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(StaffMembers::Table)
-                    .add_column(
-                        ColumnDef::new(StaffMembers::TransferredToId)
-                            .unsigned()
-                            .null(),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(StaffMembers::Table)
-                    .add_column(
-                        ColumnDef::new(StaffMembers::TransferredFromId)
-                            .unsigned()
-                            .null(),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(StaffMembers::Table)
-                    .add_column(
-                        ColumnDef::new(StaffMembers::AdminEditable)
-                            .tiny_integer()
-                            .not_null()
-                            .default(0),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-
-        // Create index for quick archived filtering
-        manager
-            .create_index(
-                Index::create()
-                    .name("idx_staff_members_archived")
-                    .table(StaffMembers::Table)
-                    .col(StaffMembers::Archived)
-                    .to_owned(),
-            )
-            .await?;
-
-        // Create composite index for station + archived filtering
-        manager
-            .create_index(
-                Index::create()
-                    .name("idx_staff_members_radio_station_archived")
-                    .table(StaffMembers::Table)
-                    .col(StaffMembers::RadioStationId)
-                    .col(StaffMembers::Archived)
-                    .to_owned(),
-            )
-            .await?;
+        // Create indexes (IF NOT EXISTS)
+        db.execute_unprepared(
+            "CREATE INDEX IF NOT EXISTS idx_staff_members_archived ON staff_members (archived)"
+        ).await?;
+        db.execute_unprepared(
+            "CREATE INDEX IF NOT EXISTS idx_staff_members_radio_station_archived ON staff_members (radio_station_id, archived)"
+        ).await?;
 
         Ok(())
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        // Drop indexes first
-        // Use raw SQL for MariaDB compatibility
+        if !manager.has_table("staff_members").await? {
+            return Ok(());
+        }
+
         manager
             .get_connection()
             .execute_unprepared("DROP INDEX IF EXISTS idx_staff_members_archived ON staff_members")
@@ -128,60 +57,17 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-        // Drop columns
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(StaffMembers::Table)
-                    .drop_column(StaffMembers::Archived)
-                    .to_owned(),
-            )
-            .await?;
-
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(StaffMembers::Table)
-                    .drop_column(StaffMembers::ArchivedAt)
-                    .to_owned(),
-            )
-            .await?;
-
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(StaffMembers::Table)
-                    .drop_column(StaffMembers::ArchivedReason)
-                    .to_owned(),
-            )
-            .await?;
-
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(StaffMembers::Table)
-                    .drop_column(StaffMembers::TransferredToId)
-                    .to_owned(),
-            )
-            .await?;
-
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(StaffMembers::Table)
-                    .drop_column(StaffMembers::TransferredFromId)
-                    .to_owned(),
-            )
-            .await?;
-
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(StaffMembers::Table)
-                    .drop_column(StaffMembers::AdminEditable)
-                    .to_owned(),
-            )
-            .await?;
+        let columns = ["archived", "archived_at", "archived_reason", "transferred_to_id", "transferred_from_id", "admin_editable"];
+        for col in columns {
+            manager
+                .alter_table(
+                    Table::alter()
+                        .table(StaffMembers::Table)
+                        .drop_column(Alias::new(col))
+                        .to_owned(),
+                )
+                .await?;
+        }
 
         Ok(())
     }
@@ -190,11 +76,4 @@ impl MigrationTrait for Migration {
 #[derive(Iden)]
 enum StaffMembers {
     Table,
-    RadioStationId,
-    Archived,
-    ArchivedAt,
-    ArchivedReason,
-    TransferredToId,
-    TransferredFromId,
-    AdminEditable,
 }
