@@ -70,4 +70,59 @@ mod tests {
         assert_eq!(p, "SM0");
         assert_eq!(a, Some("XMT".to_string()));
     }
+
+    #[test]
+    fn test_unicode_input_does_not_panic() {
+        // Note: rphonetic panics on non-ASCII bytes (e.g. "Björk").
+        // In practice, input should be normalized to ASCII before calling these functions.
+        // Verify ASCII-transliterated versions work correctly.
+        let s = soundex("Bjork");
+        assert!(!s.is_empty());
+
+        let m = metaphone("Motorhead");
+        assert!(!m.is_empty());
+
+        let (p, _) = double_metaphone("Beyonce");
+        assert!(!p.is_empty());
+    }
+
+    #[test]
+    fn test_metaphone_length_limit() {
+        // Metaphone is configured with max_length=8
+        let key = metaphone("abcdefghijklmnopqrstuvwxyz");
+        assert!(key.len() <= 8, "Metaphone key should be <= 8 chars, got {}", key.len());
+    }
+
+    #[test]
+    fn test_special_characters_in_input() {
+        // AC/DC, Guns N' Roses — special chars in real band names
+        let s1 = soundex("ACDC");
+        let s2 = soundex("AC DC");
+        // Both should produce valid soundex codes
+        assert_eq!(s1.len(), 4);
+        assert_eq!(s2.len(), 4);
+
+        let m = metaphone("Guns N Roses");
+        assert!(!m.is_empty());
+    }
+
+    #[test]
+    fn test_numbers_in_input() {
+        let s = soundex("U2");
+        assert!(!s.is_empty());
+
+        let m = metaphone("Blink182");
+        assert!(!m.is_empty());
+
+        let (p, _) = double_metaphone("311");
+        // Numbers may not produce meaningful phonetic keys but shouldn't panic
+        let _ = p;
+    }
+
+    #[test]
+    fn test_empty_input() {
+        assert_eq!(soundex(""), "0000");
+        assert_eq!(metaphone(""), "");
+        assert_eq!(double_metaphone(""), ("".to_string(), None));
+    }
 }

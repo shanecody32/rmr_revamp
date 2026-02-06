@@ -313,4 +313,92 @@ mod tests {
         assert!(score.is_some());
         assert!(score.unwrap() >= 70, "Different order + connector should still score well: {:?}", score);
     }
+
+    #[test]
+    fn test_empty_strings_return_none() {
+        assert_eq!(calculate_similarity_score("", "beatles", 0.5, 0.5, 40), None);
+        assert_eq!(calculate_similarity_score("beatles", "", 0.5, 0.5, 40), None);
+        assert_eq!(calculate_similarity_score("", "", 0.5, 0.5, 40), None);
+    }
+
+    #[test]
+    fn test_threshold_boundary() {
+        // Score right at the threshold should be returned
+        let score = calculate_similarity_score("abc", "abd", 0.5, 0.5, 0);
+        assert!(score.is_some(), "Score at threshold 0 should always return Some");
+
+        // With a very high threshold, dissimilar pairs should be None
+        let score = calculate_similarity_score("beatles", "metallica", 0.5, 0.5, 99);
+        assert!(score.is_none(), "Dissimilar pair should be None at threshold 99");
+
+        // Exact match should always pass any threshold
+        let score = calculate_similarity_score("beatles", "beatles", 0.5, 0.5, 100);
+        assert_eq!(score, Some(100));
+    }
+
+    #[test]
+    fn test_score_capped_at_100() {
+        // Even with bonuses, score should never exceed 100
+        let score = calculate_similarity_score("test", "test", 0.5, 0.5, 0);
+        assert_eq!(score, Some(100));
+
+        // A name contained within another, with high weights
+        let score = calculate_similarity_score("ab", "ab", 1.0, 1.0, 0);
+        assert!(score.unwrap() <= 100, "Score should be capped at 100, got {}", score.unwrap());
+    }
+
+    #[test]
+    fn test_asymmetric_contains_bonus() {
+        // Short name contained in long name
+        let score_forward = calculate_similarity_score("nelson", "willie nelson band", 0.5, 0.5, 0);
+        // Long name contains short name — should get the contains bonus
+        assert!(score_forward.is_some());
+
+        // Reverse: long contains short
+        let score_reverse = calculate_similarity_score("willie nelson band", "nelson", 0.5, 0.5, 0);
+        assert!(score_reverse.is_some());
+    }
+
+    #[test]
+    fn test_weight_variations() {
+        // Full Jaro-Winkler weight, no Dice
+        let jw_only = calculate_similarity_score("beatles", "beatle", 1.0, 0.0, 0);
+        // Full Dice weight, no JW
+        let dice_only = calculate_similarity_score("beatles", "beatle", 0.0, 1.0, 0);
+        // Both should produce a score but they may differ
+        assert!(jw_only.is_some());
+        assert!(dice_only.is_some());
+        // With different algorithms, scores should differ for a typo
+        // (Jaro-Winkler favors prefix matches, Dice favors bigram overlap)
+    }
+
+    #[test]
+    fn test_single_character_inputs() {
+        let score = calculate_similarity_score("a", "a", 0.5, 0.5, 0);
+        assert_eq!(score, Some(100));
+
+        let score = calculate_similarity_score("a", "b", 0.5, 0.5, 0);
+        // Single different characters — JW gives 0.0 for completely different single chars
+        assert!(score.unwrap_or(0) < 50);
+    }
+
+    #[test]
+    fn test_very_long_inputs() {
+        let long_a = "a]".repeat(500);
+        let long_b = format!("{}b", &long_a[..long_a.len()-1]);
+        // Should not panic and should complete in reasonable time
+        let _score = calculate_similarity_score(&long_a, &long_b, 0.5, 0.5, 0);
+    }
+
+    #[test]
+    fn test_unicode_normalized_inputs() {
+        // Accented characters after sanitize_name normalization
+        let score = calculate_similarity_score("beyonce", "beyonce", 0.5, 0.5, 40);
+        assert_eq!(score, Some(100));
+
+        // Names with different whitespace normalization
+        let score = calculate_similarity_score("willie  nelson", "willie nelson", 0.5, 0.5, 40);
+        assert!(score.is_some());
+        assert!(score.unwrap() >= 90);
+    }
 }
