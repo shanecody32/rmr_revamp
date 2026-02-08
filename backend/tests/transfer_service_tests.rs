@@ -75,8 +75,8 @@ mod error_tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
-            matches!(err, DbErr::Custom(ref msg) if msg.contains("Song 99 not found")),
-            "Expected Custom error about song not found, got: {err:?}"
+            matches!(err, DbErr::RecordNotFound(ref msg) if msg.contains("Song 99 not found")),
+            "Expected RecordNotFound error about song not found, got: {err:?}"
         );
     }
 
@@ -92,8 +92,8 @@ mod error_tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
-            matches!(err, DbErr::Custom(ref msg) if msg.contains("Album 99 not found")),
-            "Expected Custom error about album not found, got: {err:?}"
+            matches!(err, DbErr::RecordNotFound(ref msg) if msg.contains("Album 99 not found")),
+            "Expected RecordNotFound error about album not found, got: {err:?}"
         );
     }
 
@@ -107,8 +107,8 @@ mod error_tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
-            matches!(err, DbErr::Custom(ref msg) if msg.contains("Song 99 not found")),
-            "Expected Custom error about song not found, got: {err:?}"
+            matches!(err, DbErr::RecordNotFound(ref msg) if msg.contains("Song 99 not found")),
+            "Expected RecordNotFound error about song not found, got: {err:?}"
         );
     }
 
@@ -124,8 +124,8 @@ mod error_tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
-            matches!(err, DbErr::Custom(ref msg) if msg.contains("Band 99 not found")),
-            "Expected Custom error about band not found, got: {err:?}"
+            matches!(err, DbErr::RecordNotFound(ref msg) if msg.contains("Band 99 not found")),
+            "Expected RecordNotFound error about band not found, got: {err:?}"
         );
     }
 
@@ -139,8 +139,8 @@ mod error_tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
-            matches!(err, DbErr::Custom(ref msg) if msg.contains("Song is not on this album")),
-            "Expected Custom error about song not on album, got: {err:?}"
+            matches!(err, DbErr::RecordNotFound(ref msg) if msg.contains("Song is not on this album")),
+            "Expected RecordNotFound error about song not on album, got: {err:?}"
         );
     }
 
@@ -155,8 +155,8 @@ mod error_tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
-            matches!(err, DbErr::Custom(ref msg) if msg.contains("Album 99 not found")),
-            "Expected Custom error about album not found, got: {err:?}"
+            matches!(err, DbErr::RecordNotFound(ref msg) if msg.contains("Album 99 not found")),
+            "Expected RecordNotFound error about album not found, got: {err:?}"
         );
     }
 
@@ -173,8 +173,8 @@ mod error_tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
-            matches!(err, DbErr::Custom(ref msg) if msg.contains("Band 99 not found")),
-            "Expected Custom error about band not found, got: {err:?}"
+            matches!(err, DbErr::RecordNotFound(ref msg) if msg.contains("Band 99 not found")),
+            "Expected RecordNotFound error about band not found, got: {err:?}"
         );
     }
 }
@@ -526,11 +526,11 @@ mod album_to_band_tests {
     ///   E4: update_many staff_playlist_archives
     ///   E5: update_many radio_playlists
     ///   E6: update_many radio_playlist_archives
-    ///   E7..E7+N-1: update_many source band status (per source band)
-    ///   E(7+N): update_many target band status
-    ///   E(8+N): update_many album status
+    ///   E7: update_many source band status (batch is_in)
+    ///   E8: update_many target band status
+    ///   E9: update_many album status
     ///   -- commit txn --
-    ///   E(9+N): insert action_log (exec)
+    ///   E10: insert action_log (exec)
     ///   Q5: insert action_log (select-back)
     fn build_album_to_band_no_songs_db(
         source_band_ids: &[u32],
@@ -571,15 +571,13 @@ mod album_to_band_tests {
         builder = builder.append_exec_results(vec![exec(radio_pl)]);
         // E6: update_many radio_playlist_archives
         builder = builder.append_exec_results(vec![exec(radio_arch)]);
-        // E7..E7+N-1: source band status updates
-        for _ in source_band_ids {
-            builder = builder.append_exec_results(vec![exec(1)]);
-        }
-        // E(7+N): target band status
+        // E7: source band status batch update (is_in)
+        builder = builder.append_exec_results(vec![exec(source_band_ids.len() as u64)]);
+        // E8: target band status
         builder = builder.append_exec_results(vec![exec(1)]);
-        // E(8+N): album status
+        // E9: album status
         builder = builder.append_exec_results(vec![exec(1)]);
-        // E(9+N): insert action_log (exec)
+        // E10: insert action_log (exec)
         builder = builder.append_exec_results(vec![exec_insert(1)]);
         // Q5: insert action_log (select-back)
         builder = builder.append_query_results(vec![vec![action_log]]);
@@ -640,24 +638,20 @@ mod album_to_band_tests {
         builder = builder.append_exec_results(vec![exec(0)]);
         // Q+: albums_songs find all (songs on album) — transfer_songs=true
         builder = builder.append_query_results(vec![songs_on_album]);
-        // Per song: 3 execs
-        for _ in song_ids {
-            // E+: update_many songs.band_id
-            builder = builder.append_exec_results(vec![exec(1)]);
-            // E+: update_many song_aliases
-            builder = builder.append_exec_results(vec![exec(aliases_per_song)]);
-            // E+: update_many radio_raw_datas
-            builder = builder.append_exec_results(vec![exec(raw_per_song)]);
-        }
-        // E7..E7+N-1: source band status updates
-        for _ in source_band_ids {
-            builder = builder.append_exec_results(vec![exec(1)]);
-        }
-        // E(7+N): target band status
+        // Batch song updates: 3 execs total (not per-song)
+        // E+: update_many songs.band_id (batch is_in)
+        builder = builder.append_exec_results(vec![exec(song_ids.len() as u64)]);
+        // E+: update_many song_aliases (batch is_in)
+        builder = builder.append_exec_results(vec![exec(aliases_per_song * song_ids.len() as u64)]);
+        // E+: update_many radio_raw_datas (batch is_in)
+        builder = builder.append_exec_results(vec![exec(raw_per_song * song_ids.len() as u64)]);
+        // E7: source band status batch update (is_in)
+        builder = builder.append_exec_results(vec![exec(source_band_ids.len() as u64)]);
+        // E8: target band status
         builder = builder.append_exec_results(vec![exec(1)]);
-        // E(8+N): album status
+        // E9: album status
         builder = builder.append_exec_results(vec![exec(1)]);
-        // E(9+N): insert action_log (exec)
+        // E10: insert action_log (exec)
         builder = builder.append_exec_results(vec![exec_insert(1)]);
         // Q5: insert action_log (select-back)
         builder = builder.append_query_results(vec![vec![action_log]]);

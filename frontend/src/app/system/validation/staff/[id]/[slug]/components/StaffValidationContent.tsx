@@ -31,6 +31,7 @@ import {
     MailOutlined,
     PhoneOutlined,
 } from '@ant-design/icons';
+import DOMPurify from 'dompurify';
 import Link from 'next/link';
 
 import LoadingSpinner from '@/components/common/feedback/LoadingSpinner';
@@ -386,7 +387,7 @@ export default function StaffValidationContent({ id, slug }: StaffValidationCont
                                 <Divider>Bio</Divider>
                                 <div
                                     className="prose max-w-none"
-                                    dangerouslySetInnerHTML={{ __html: staff.bio }}
+                                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(staff.bio) }}
                                 />
                             </>
                         )}
@@ -396,7 +397,7 @@ export default function StaffValidationContent({ id, slug }: StaffValidationCont
                                 <Divider>Show Description</Divider>
                                 <div
                                     className="prose max-w-none"
-                                    dangerouslySetInnerHTML={{ __html: staff.show_description }}
+                                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(staff.show_description) }}
                                 />
                             </>
                         )}

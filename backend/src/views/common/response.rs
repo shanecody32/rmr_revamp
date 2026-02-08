@@ -249,7 +249,7 @@ impl From<DbErr> for ApiError {
             },
             DbErr::RecordNotInserted => Self::internal("Failed to insert record"),
             DbErr::RecordNotUpdated => Self::internal("Failed to update record"),
-            DbErr::Custom(msg) => Self::internal(msg),
+            DbErr::Custom(msg) => Self::bad_request(msg),
             _ => Self::internal_error(),
         }
     }

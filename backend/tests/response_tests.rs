@@ -40,7 +40,7 @@ fn test_from_dberr_record_not_updated() {
 fn test_from_dberr_custom_includes_message() {
     let db_err = DbErr::Custom("unique constraint violated".to_string());
     let api_err = ApiError::from(db_err);
-    assert_eq!(api_err.error.code, "INTERNAL_ERROR");
+    assert_eq!(api_err.error.code, "BAD_REQUEST");
     assert_eq!(api_err.error.message, "unique constraint violated");
 }
 

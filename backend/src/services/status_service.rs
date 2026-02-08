@@ -99,7 +99,7 @@ impl StatusService {
         let band = bands::Entity::find_by_id(band_id)
             .one(db)
             .await?
-            .ok_or_else(|| DbErr::Custom(format!("Band {} not found", band_id)))?;
+            .ok_or_else(|| DbErr::RecordNotFound(format!("Band {} not found", band_id)))?;
 
         let old_status = band.data_status.clone();
 
@@ -148,7 +148,7 @@ impl StatusService {
         let band = bands::Entity::find_by_id(band_id)
             .one(db)
             .await?
-            .ok_or_else(|| DbErr::Custom(format!("Band {} not found", band_id)))?;
+            .ok_or_else(|| DbErr::RecordNotFound(format!("Band {} not found", band_id)))?;
 
         // Validation: can't approve if duplicate detected
         if update.status == chart_status::APPROVED && band.data_status == data_status::DUPLICATE_DETECTED {
@@ -212,7 +212,7 @@ impl StatusService {
         let album = albums::Entity::find_by_id(album_id)
             .one(db)
             .await?
-            .ok_or_else(|| DbErr::Custom(format!("Album {} not found", album_id)))?;
+            .ok_or_else(|| DbErr::RecordNotFound(format!("Album {} not found", album_id)))?;
 
         let old_status = album.data_status.clone();
 
@@ -261,7 +261,7 @@ impl StatusService {
         let album = albums::Entity::find_by_id(album_id)
             .one(db)
             .await?
-            .ok_or_else(|| DbErr::Custom(format!("Album {} not found", album_id)))?;
+            .ok_or_else(|| DbErr::RecordNotFound(format!("Album {} not found", album_id)))?;
 
         if update.status == chart_status::APPROVED && album.data_status == data_status::DUPLICATE_DETECTED {
             return Err(DbErr::Custom(
@@ -323,7 +323,7 @@ impl StatusService {
         let song = songs::Entity::find_by_id(song_id)
             .one(db)
             .await?
-            .ok_or_else(|| DbErr::Custom(format!("Song {} not found", song_id)))?;
+            .ok_or_else(|| DbErr::RecordNotFound(format!("Song {} not found", song_id)))?;
 
         let old_status = song.data_status.clone();
 
@@ -372,7 +372,7 @@ impl StatusService {
         let song = songs::Entity::find_by_id(song_id)
             .one(db)
             .await?
-            .ok_or_else(|| DbErr::Custom(format!("Song {} not found", song_id)))?;
+            .ok_or_else(|| DbErr::RecordNotFound(format!("Song {} not found", song_id)))?;
 
         if update.status == chart_status::APPROVED && song.data_status == data_status::DUPLICATE_DETECTED {
             return Err(DbErr::Custom(
@@ -434,7 +434,7 @@ impl StatusService {
         let station = radio_stations::Entity::find_by_id(station_id)
             .one(db)
             .await?
-            .ok_or_else(|| DbErr::Custom(format!("Radio station {} not found", station_id)))?;
+            .ok_or_else(|| DbErr::RecordNotFound(format!("Radio station {} not found", station_id)))?;
 
         let old_status = station.data_status.clone();
 
@@ -483,7 +483,7 @@ impl StatusService {
         let station = radio_stations::Entity::find_by_id(station_id)
             .one(db)
             .await?
-            .ok_or_else(|| DbErr::Custom(format!("Radio station {} not found", station_id)))?;
+            .ok_or_else(|| DbErr::RecordNotFound(format!("Radio station {} not found", station_id)))?;
 
         if update.status == chart_status::APPROVED && station.data_status == data_status::DUPLICATE_DETECTED {
             return Err(DbErr::Custom(
@@ -545,7 +545,7 @@ impl StatusService {
         let staff = staff_members::Entity::find_by_id(staff_id)
             .one(db)
             .await?
-            .ok_or_else(|| DbErr::Custom(format!("Staff member {} not found", staff_id)))?;
+            .ok_or_else(|| DbErr::RecordNotFound(format!("Staff member {} not found", staff_id)))?;
 
         let old_status = staff.data_status.clone();
 
@@ -594,7 +594,7 @@ impl StatusService {
         let staff = staff_members::Entity::find_by_id(staff_id)
             .one(db)
             .await?
-            .ok_or_else(|| DbErr::Custom(format!("Staff member {} not found", staff_id)))?;
+            .ok_or_else(|| DbErr::RecordNotFound(format!("Staff member {} not found", staff_id)))?;
 
         if update.status == chart_status::APPROVED && staff.data_status == data_status::DUPLICATE_DETECTED {
             return Err(DbErr::Custom(

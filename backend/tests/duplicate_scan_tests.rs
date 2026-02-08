@@ -1,7 +1,12 @@
-//! Tests for duplicate scan types, GenericCandidate From impls, and ScanEntityType parsing.
+//! Tests for duplicate scan types, GenericCandidate From impls, ScanEntityType parsing,
+//! and candidate CRUD service operations.
 
-use backend::services::duplicate_scan_service::{GenericCandidate, CandidateFilterParams};
+mod common;
+
+use backend::services::duplicate_scan_service::{GenericCandidate, CandidateFilterParams, DuplicateScanService};
+use backend::models::band_duplicate_candidates::CandidateStatus;
 use backend::models::duplicate_scan_state::ScanEntityType;
+use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult};
 
 // ─── GenericCandidate From impls ────────────────────────────────────
 
@@ -205,4 +210,180 @@ fn test_scan_entity_type_display_name() {
     assert_eq!(ScanEntityType::Albums.display_name(), "Albums");
     assert_eq!(ScanEntityType::RadioStations.display_name(), "Radio Stations");
     assert_eq!(ScanEntityType::StaffMembers.display_name(), "Staff Members");
+}
+
+// ─── Service-Level Candidate CRUD Tests ─────────────────────────
+
+fn exec(rows_affected: u64) -> MockExecResult {
+    MockExecResult {
+        last_insert_id: 0,
+        rows_affected,
+    }
+}
+
+mod candidate_status_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn update_candidate_status_reviewed() {
+        let mut candidate = common::make_test_band_duplicate_candidate(1, 10, 20, 95);
+        candidate.status = "reviewed".to_string();
+
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            // E1: update exec
+            .append_exec_results(vec![exec(1)])
+            // Q1: update select-back
+            .append_query_results(vec![vec![candidate]])
+            .into_connection();
+
+        let result = DuplicateScanService::update_candidate_status(
+            &db,
+            &ScanEntityType::Bands,
+            1,
+            CandidateStatus::Reviewed,
+            Some(42),
+        )
+        .await;
+        assert!(result.is_ok(), "update_candidate_status failed: {:?}", result.err());
+    }
+
+    #[tokio::test]
+    async fn update_candidate_status_dismissed() {
+        let mut candidate = common::make_test_band_duplicate_candidate(2, 30, 40, 88);
+        candidate.status = "dismissed".to_string();
+
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            .append_exec_results(vec![exec(1)])
+            .append_query_results(vec![vec![candidate]])
+            .into_connection();
+
+        let result = DuplicateScanService::update_candidate_status(
+            &db,
+            &ScanEntityType::Bands,
+            2,
+            CandidateStatus::Dismissed,
+            None,
+        )
+        .await;
+        assert!(result.is_ok(), "update_candidate_status dismissed failed: {:?}", result.err());
+    }
+
+    #[tokio::test]
+    async fn restore_candidate_success() {
+        let candidate = common::make_test_band_duplicate_candidate(1, 10, 20, 95);
+
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            .append_exec_results(vec![exec(1)])
+            .append_query_results(vec![vec![candidate]])
+            .into_connection();
+
+        let result = DuplicateScanService::restore_candidate(
+            &db,
+            &ScanEntityType::Bands,
+            1,
+        )
+        .await;
+        assert!(result.is_ok(), "restore_candidate failed: {:?}", result.err());
+    }
+}
+
+mod clear_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn clear_all_candidates() {
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            .append_exec_results(vec![exec(5)])
+            .into_connection();
+
+        let result = DuplicateScanService::clear_candidates(
+            &db,
+            &ScanEntityType::Bands,
+            false,
+        )
+        .await;
+        assert!(result.is_ok(), "clear_all_candidates failed: {:?}", result.err());
+        assert_eq!(result.unwrap(), 5);
+    }
+
+    #[tokio::test]
+    async fn clear_pending_only() {
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            .append_exec_results(vec![exec(3)])
+            .into_connection();
+
+        let result = DuplicateScanService::clear_candidates(
+            &db,
+            &ScanEntityType::Bands,
+            true,
+        )
+        .await;
+        assert!(result.is_ok(), "clear_pending_only failed: {:?}", result.err());
+        assert_eq!(result.unwrap(), 3);
+    }
+}
+
+mod match_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn get_matches_found() {
+        let c1 = common::make_test_band_duplicate_candidate(1, 10, 20, 95);
+        let c2 = common::make_test_band_duplicate_candidate(2, 10, 30, 88);
+
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            .append_query_results(vec![vec![c1, c2]])
+            .into_connection();
+
+        let result = DuplicateScanService::get_entity_matches(
+            &db,
+            &ScanEntityType::Bands,
+            10,
+        )
+        .await;
+        assert!(result.is_ok(), "get_matches_found failed: {:?}", result.err());
+        let matches = result.unwrap();
+        assert_eq!(matches.len(), 2);
+        assert_eq!(matches[0].entity_id_1, 10);
+        assert_eq!(matches[0].entity_id_2, 20);
+        assert_eq!(matches[0].similarity_score, 95);
+    }
+
+    #[tokio::test]
+    async fn get_matches_empty() {
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            .append_query_results(vec![Vec::<backend::models::band_duplicate_candidates::Model>::new()])
+            .into_connection();
+
+        let result = DuplicateScanService::get_entity_matches(
+            &db,
+            &ScanEntityType::Bands,
+            999,
+        )
+        .await;
+        assert!(result.is_ok(), "get_matches_empty failed: {:?}", result.err());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn get_matches_different_entity_type() {
+        let c1 = common::make_test_song_duplicate_candidate(1, 100, 200, 92);
+
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            .append_query_results(vec![vec![c1]])
+            .into_connection();
+
+        let result = DuplicateScanService::get_entity_matches(
+            &db,
+            &ScanEntityType::Songs,
+            100,
+        )
+        .await;
+        assert!(result.is_ok(), "get_matches songs failed: {:?}", result.err());
+        let matches = result.unwrap();
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].entity_id_1, 100);
+        assert_eq!(matches[0].entity_id_2, 200);
+        assert_eq!(matches[0].similarity_score, 92);
+    }
 }

@@ -115,12 +115,12 @@ impl TransferService {
         let song = songs::Entity::find_by_id(song_id)
             .one(db)
             .await?
-            .ok_or_else(|| DbErr::Custom(format!("Song {} not found", song_id)))?;
+            .ok_or_else(|| DbErr::RecordNotFound(format!("Song {} not found", song_id)))?;
 
         let target_album = albums::Entity::find_by_id(target_album_id)
             .one(db)
             .await?
-            .ok_or_else(|| DbErr::Custom(format!("Album {} not found", target_album_id)))?;
+            .ok_or_else(|| DbErr::RecordNotFound(format!("Album {} not found", target_album_id)))?;
 
         // Get current album associations
         let current_albums: Vec<albums_songs::Model> = albums_songs::Entity::find()
@@ -309,12 +309,12 @@ impl TransferService {
         let song = songs::Entity::find_by_id(song_id)
             .one(db)
             .await?
-            .ok_or_else(|| DbErr::Custom(format!("Song {} not found", song_id)))?;
+            .ok_or_else(|| DbErr::RecordNotFound(format!("Song {} not found", song_id)))?;
 
         let target_band = bands::Entity::find_by_id(target_band_id)
             .one(db)
             .await?
-            .ok_or_else(|| DbErr::Custom(format!("Band {} not found", target_band_id)))?;
+            .ok_or_else(|| DbErr::RecordNotFound(format!("Band {} not found", target_band_id)))?;
 
         let source_band_id = song.band_id;
 
@@ -450,7 +450,7 @@ impl TransferService {
             .filter(albums_songs::Column::AlbumId.eq(album_id))
             .one(db)
             .await?
-            .ok_or_else(|| DbErr::Custom("Song is not on this album".to_string()))?;
+            .ok_or_else(|| DbErr::RecordNotFound("Song is not on this album".to_string()))?;
 
         let txn = db.begin().await?;
 
@@ -544,10 +544,11 @@ impl TransferService {
             affected.songs = songs_on_album.len() as u64;
             stats_song_ids = songs_on_album.iter().map(|s| s.song_id).collect();
 
-            // Count aliases for songs
-            for song in &songs_on_album {
-                affected.song_aliases += song_aliases::Entity::find()
-                    .filter(song_aliases::Column::SongId.eq(song.song_id))
+            // Count aliases for songs (batch)
+            let song_ids: Vec<u32> = songs_on_album.iter().map(|s| s.song_id).collect();
+            if !song_ids.is_empty() {
+                affected.song_aliases = song_aliases::Entity::find()
+                    .filter(song_aliases::Column::SongId.is_in(song_ids))
                     .count(db)
                     .await?;
             }
@@ -575,12 +576,12 @@ impl TransferService {
         let album = albums::Entity::find_by_id(album_id)
             .one(db)
             .await?
-            .ok_or_else(|| DbErr::Custom(format!("Album {} not found", album_id)))?;
+            .ok_or_else(|| DbErr::RecordNotFound(format!("Album {} not found", album_id)))?;
 
         let target_band = bands::Entity::find_by_id(target_band_id)
             .one(db)
             .await?
-            .ok_or_else(|| DbErr::Custom(format!("Band {} not found", target_band_id)))?;
+            .ok_or_else(|| DbErr::RecordNotFound(format!("Band {} not found", target_band_id)))?;
 
         // Get current band associations
         let current_bands: Vec<albums_bands::Model> = albums_bands::Entity::find()
@@ -647,38 +648,40 @@ impl TransferService {
                 .all(&txn)
                 .await?;
 
-            for song_assoc in &songs_on_album {
-                // Update song's band_id
+            let song_ids: Vec<u32> = songs_on_album.iter().map(|s| s.song_id).collect();
+
+            if !song_ids.is_empty() {
+                // Batch update songs.band_id
                 songs::Entity::update_many()
-                    .filter(songs::Column::Id.eq(song_assoc.song_id))
+                    .filter(songs::Column::Id.is_in(song_ids.clone()))
                     .col_expr(songs::Column::BandId, Expr::value(target_band_id))
                     .exec(&txn)
                     .await?;
 
-                // Update song aliases
+                // Batch update song aliases
                 let alias_result = song_aliases::Entity::update_many()
-                    .filter(song_aliases::Column::SongId.eq(song_assoc.song_id))
+                    .filter(song_aliases::Column::SongId.is_in(song_ids.clone()))
                     .col_expr(song_aliases::Column::BandId, Expr::value(target_band_id))
                     .exec(&txn)
                     .await?;
-                affected.song_aliases += alias_result.rows_affected;
+                affected.song_aliases = alias_result.rows_affected;
 
-                // Update radio_raw_datas for songs
+                // Batch update radio_raw_datas for songs
                 let raw_result = radio_raw_datas::Entity::update_many()
-                    .filter(radio_raw_datas::Column::SongId.eq(song_assoc.song_id))
+                    .filter(radio_raw_datas::Column::SongId.is_in(song_ids))
                     .col_expr(radio_raw_datas::Column::BandId, Expr::value(target_band_id))
                     .exec(&txn)
                     .await?;
-                affected.radio_raw_datas += raw_result.rows_affected;
+                affected.radio_raw_datas = raw_result.rows_affected;
             }
 
             affected.songs = songs_on_album.len() as u64;
         }
 
         // 8. Mark source bands as needs_review
-        for band_id in &source_band_ids {
+        if !source_band_ids.is_empty() {
             bands::Entity::update_many()
-                .filter(bands::Column::Id.eq(*band_id))
+                .filter(bands::Column::Id.is_in(source_band_ids.clone()))
                 .col_expr(bands::Column::DataStatus, Expr::value("needs_review"))
                 .col_expr(bands::Column::DataStatusReason, Expr::value("transfer"))
                 .col_expr(bands::Column::DataStatusAt, Expr::value(Utc::now().naive_utc()))

@@ -6,7 +6,7 @@ use axum::{
     Json, Router,
 };
 use crate::services::location_service::LocationService;
-use crate::services::types::{PaginatedResponse, PaginationInfo, SimilarityParams, SimilarResult};
+use crate::services::types::{PaginatedResponse, SimilarityParams, SimilarResult};
 use crate::views::ApiError;
 use crate::job_state::AppState;
 use crate::models::states::Model as StateModel;
@@ -65,44 +65,11 @@ pub(crate) async fn get_states(
     State(state): State<AppState>,
     Query(params): Query<StateFilterParams>,
 ) -> impl IntoResponse {
-    match LocationService::get_states(&state.db, params.country_id).await {
-        Ok(states) => {
-            let filtered: Vec<_> = states.into_iter().filter(|s| {
-                if let Some(name) = &params.name {
-                    if name.is_empty() { return true; }
-                    let name_low = name.to_lowercase();
-                    let s_name = s.name.as_ref().map(|n| n.to_lowercase()).unwrap_or_default();
-                    
-                    match params.name_filter_type.as_deref() {
-                        Some("starts_with") => s_name.starts_with(&name_low),
-                        Some("ends_with") => s_name.ends_with(&name_low),
-                        Some("exact_match") => s_name == name_low,
-                        _ => s_name.contains(&name_low),
-                    }
-                } else {
-                    true
-                }
-            }).collect();
-            
-            let total_items = filtered.len() as u64;
-            let page = params.page.unwrap_or(1);
-            let page_size = params.page_size.unwrap_or(10);
-            
-            let results = filtered.into_iter()
-                .skip(((page - 1) * page_size) as usize)
-                .take(page_size as usize)
-                .collect();
+    let page = params.page.unwrap_or(1);
+    let page_size = params.page_size.unwrap_or(10);
 
-            (StatusCode::OK, Json(PaginatedResponse {
-                results,
-                pagination: PaginationInfo {
-                    page,
-                    page_size,
-                    total_pages: total_items.div_ceil(page_size),
-                    total_items,
-                }
-            })).into_response()
-        },
+    match LocationService::get_states(&state.db, params.country_id, params.name, params.name_filter_type, page, page_size).await {
+        Ok(paginated) => (StatusCode::OK, Json(paginated)).into_response(),
         Err(e) => ApiError::from(e).into_response(),
     }
 }

@@ -18,6 +18,7 @@ use crate::services::action_log_service::ActionLogService;
 use super::types::{MergeAlbumsRequest, AlbumMergeResult, AlbumMergeStats};
 use chrono::NaiveDate;
 use sea_orm::*;
+use sea_orm::sea_query::Expr;
 use std::collections::{HashMap, HashSet};
 
 // Type aliases for complex HashMap types used in playlist aggregation
@@ -134,23 +135,21 @@ pub async fn merge_albums(
                 .filter_map(|img| img.path)
                 .collect();
 
-            for from_id in &from_ids {
-                let images = AlbumImage::find()
-                    .filter(AlbumImageColumn::AlbumId.eq(*from_id))
-                    .all(txn)
-                    .await?;
+            let images = AlbumImage::find()
+                .filter(AlbumImageColumn::AlbumId.is_in(from_ids.clone()))
+                .all(txn)
+                .await?;
 
-                for img in images {
-                    if let Some(ref path) = img.path
-                        && existing_paths.contains(path) {
-                            stats.images_deduped += 1;
-                            continue;
-                        }
-                    let mut active: crate::models::album_images::ActiveModel = img.into();
-                    active.album_id = Set(Some(target_id));
-                    active.update(txn).await?;
-                    stats.images_moved += 1;
-                }
+            for img in images {
+                if let Some(ref path) = img.path
+                    && existing_paths.contains(path) {
+                        stats.images_deduped += 1;
+                        continue;
+                    }
+                let mut active: crate::models::album_images::ActiveModel = img.into();
+                active.album_id = Set(Some(target_id));
+                active.update(txn).await?;
+                stats.images_moved += 1;
             }
 
             // 3. Move albums_bands associations (dedupe by band_id)
@@ -162,25 +161,23 @@ pub async fn merge_albums(
                 .filter_map(|ab| ab.band_id)
                 .collect();
 
-            for from_id in &from_ids {
-                let album_bands = AlbumsBands::find()
-                    .filter(AlbumsBandsColumn::AlbumId.eq(*from_id))
-                    .all(txn)
-                    .await?;
+            let album_bands = AlbumsBands::find()
+                .filter(AlbumsBandsColumn::AlbumId.is_in(from_ids.clone()))
+                .all(txn)
+                .await?;
 
-                for ab in album_bands {
-                    if let Some(band_id) = ab.band_id
-                        && existing_band_ids.contains(&band_id) {
-                            let active: crate::models::albums_bands::ActiveModel = ab.into();
-                            active.delete(txn).await?;
-                            stats.band_associations_deduped += 1;
-                            continue;
-                        }
-                    let mut active: crate::models::albums_bands::ActiveModel = ab.into();
-                    active.album_id = Set(Some(target_id));
-                    active.update(txn).await?;
-                    stats.band_associations_moved += 1;
-                }
+            for ab in album_bands {
+                if let Some(band_id) = ab.band_id
+                    && existing_band_ids.contains(&band_id) {
+                        let active: crate::models::albums_bands::ActiveModel = ab.into();
+                        active.delete(txn).await?;
+                        stats.band_associations_deduped += 1;
+                        continue;
+                    }
+                let mut active: crate::models::albums_bands::ActiveModel = ab.into();
+                active.album_id = Set(Some(target_id));
+                active.update(txn).await?;
+                stats.band_associations_moved += 1;
             }
 
             // 4. Move albums_songs associations (dedupe by song_id)
@@ -192,24 +189,22 @@ pub async fn merge_albums(
                 .map(|as_| as_.song_id)
                 .collect();
 
-            for from_id in &from_ids {
-                let album_songs = AlbumSong::find()
-                    .filter(AlbumSongColumn::AlbumId.eq(*from_id))
-                    .all(txn)
-                    .await?;
+            let album_songs = AlbumSong::find()
+                .filter(AlbumSongColumn::AlbumId.is_in(from_ids.clone()))
+                .all(txn)
+                .await?;
 
-                for as_ in album_songs {
-                    if existing_song_ids.contains(&as_.song_id) {
-                        let active: crate::models::albums_songs::ActiveModel = as_.into();
-                        active.delete(txn).await?;
-                        stats.song_associations_deduped += 1;
-                        continue;
-                    }
-                    let mut active: crate::models::albums_songs::ActiveModel = as_.into();
-                    active.album_id = Set(target_id);
-                    active.update(txn).await?;
-                    stats.song_associations_moved += 1;
+            for as_ in album_songs {
+                if existing_song_ids.contains(&as_.song_id) {
+                    let active: crate::models::albums_songs::ActiveModel = as_.into();
+                    active.delete(txn).await?;
+                    stats.song_associations_deduped += 1;
+                    continue;
                 }
+                let mut active: crate::models::albums_songs::ActiveModel = as_.into();
+                active.album_id = Set(target_id);
+                active.update(txn).await?;
+                stats.song_associations_moved += 1;
             }
 
             // 5. Merge albums_sub_genres associations (dedupe by sub_genre_id)
@@ -221,24 +216,22 @@ pub async fn merge_albums(
                 .filter_map(|asg| asg.sub_genre_id)
                 .collect();
 
-            for from_id in &from_ids {
-                let album_sub_genres = AlbumSubGenre::find()
-                    .filter(AlbumSubGenreColumn::AlbumId.eq(*from_id))
-                    .all(txn)
-                    .await?;
+            let album_sub_genres = AlbumSubGenre::find()
+                .filter(AlbumSubGenreColumn::AlbumId.is_in(from_ids.clone()))
+                .all(txn)
+                .await?;
 
-                for asg in album_sub_genres {
-                    if let Some(sg_id) = asg.sub_genre_id
-                        && existing_sub_genre_ids.contains(&sg_id) {
-                            let active: AlbumSubGenreActiveModel = asg.into();
-                            active.delete(txn).await?;
-                            continue;
-                        }
-                    let mut active: AlbumSubGenreActiveModel = asg.into();
-                    active.album_id = Set(Some(target_id));
-                    active.update(txn).await?;
-                    stats.sub_genres_added += 1;
-                }
+            for asg in album_sub_genres {
+                if let Some(sg_id) = asg.sub_genre_id
+                    && existing_sub_genre_ids.contains(&sg_id) {
+                        let active: AlbumSubGenreActiveModel = asg.into();
+                        active.delete(txn).await?;
+                        continue;
+                    }
+                let mut active: AlbumSubGenreActiveModel = asg.into();
+                active.album_id = Set(Some(target_id));
+                active.update(txn).await?;
+                stats.sub_genres_added += 1;
             }
 
             // 6. Radio playlists — aggregate spins on composite key match
@@ -256,31 +249,28 @@ pub async fn merge_albums(
                     );
                 }
 
-                for from_id in &from_ids {
-                    let playlists = RadioPlaylist::find()
-                        .filter(RadioPlaylistColumn::AlbumId.eq(*from_id))
-                        .all(txn)
-                        .await?;
+                let playlists = RadioPlaylist::find()
+                    .filter(RadioPlaylistColumn::AlbumId.is_in(from_ids.clone()))
+                    .all(txn)
+                    .await?;
 
-                    for pl in playlists {
-                        let key = (pl.radio_station_id, pl.band_id, pl.song_id);
-                        if let Some(&(target_pl_id, target_spins, target_sub_spins)) = target_map.get(&key) {
-                            let target_entry = RadioPlaylist::find_by_id(target_pl_id).one(txn).await?
-                                .ok_or(DbErr::RecordNotFound("Target playlist entry not found".to_string()))?;
-                            let mut active: crate::models::radio_playlists::ActiveModel = target_entry.into();
-                            active.spins = Set(target_spins + pl.spins);
-                            active.subtract_spins = Set(target_sub_spins + pl.subtract_spins);
-                            active.update(txn).await?;
+                for pl in playlists {
+                    let key = (pl.radio_station_id, pl.band_id, pl.song_id);
+                    if let Some(&(target_pl_id, target_spins, target_sub_spins)) = target_map.get(&key) {
+                        RadioPlaylist::update_many()
+                            .filter(RadioPlaylistColumn::Id.eq(target_pl_id))
+                            .col_expr(RadioPlaylistColumn::Spins, Expr::value(target_spins + pl.spins))
+                            .col_expr(RadioPlaylistColumn::SubtractSpins, Expr::value(target_sub_spins + pl.subtract_spins))
+                            .exec(txn).await?;
 
-                            let source_active: crate::models::radio_playlists::ActiveModel = pl.into();
-                            source_active.delete(txn).await?;
-                            stats.radio_playlists_aggregated += 1;
-                        } else {
-                            let mut active: crate::models::radio_playlists::ActiveModel = pl.into();
-                            active.album_id = Set(Some(target_id));
-                            active.update(txn).await?;
-                            stats.radio_playlists_moved += 1;
-                        }
+                        let source_active: crate::models::radio_playlists::ActiveModel = pl.into();
+                        source_active.delete(txn).await?;
+                        stats.radio_playlists_aggregated += 1;
+                    } else {
+                        let mut active: crate::models::radio_playlists::ActiveModel = pl.into();
+                        active.album_id = Set(Some(target_id));
+                        active.update(txn).await?;
+                        stats.radio_playlists_moved += 1;
                     }
                 }
             }
@@ -300,31 +290,28 @@ pub async fn merge_albums(
                     );
                 }
 
-                for from_id in &from_ids {
-                    let archives = RadioPlaylistArchive::find()
-                        .filter(RadioPlaylistArchiveColumn::AlbumId.eq(*from_id))
-                        .all(txn)
-                        .await?;
+                let archives = RadioPlaylistArchive::find()
+                    .filter(RadioPlaylistArchiveColumn::AlbumId.is_in(from_ids.clone()))
+                    .all(txn)
+                    .await?;
 
-                    for arch in archives {
-                        let key = (arch.radio_station_id, arch.band_id, arch.song_id, arch.week_ending);
-                        if let Some(&(target_arch_id, target_spins, target_sub_spins)) = target_map.get(&key) {
-                            let target_entry = RadioPlaylistArchive::find_by_id(target_arch_id).one(txn).await?
-                                .ok_or(DbErr::RecordNotFound("Target archive entry not found".to_string()))?;
-                            let mut active: crate::models::radio_playlist_archives::ActiveModel = target_entry.into();
-                            active.spins = Set(target_spins + arch.spins);
-                            active.subtract_spins = Set(target_sub_spins + arch.subtract_spins);
-                            active.update(txn).await?;
+                for arch in archives {
+                    let key = (arch.radio_station_id, arch.band_id, arch.song_id, arch.week_ending);
+                    if let Some(&(target_arch_id, target_spins, target_sub_spins)) = target_map.get(&key) {
+                        RadioPlaylistArchive::update_many()
+                            .filter(RadioPlaylistArchiveColumn::Id.eq(target_arch_id))
+                            .col_expr(RadioPlaylistArchiveColumn::Spins, Expr::value(target_spins + arch.spins))
+                            .col_expr(RadioPlaylistArchiveColumn::SubtractSpins, Expr::value(target_sub_spins + arch.subtract_spins))
+                            .exec(txn).await?;
 
-                            let source_active: crate::models::radio_playlist_archives::ActiveModel = arch.into();
-                            source_active.delete(txn).await?;
-                            stats.radio_playlist_archives_aggregated += 1;
-                        } else {
-                            let mut active: crate::models::radio_playlist_archives::ActiveModel = arch.into();
-                            active.album_id = Set(Some(target_id));
-                            active.update(txn).await?;
-                            stats.radio_playlist_archives_moved += 1;
-                        }
+                        let source_active: crate::models::radio_playlist_archives::ActiveModel = arch.into();
+                        source_active.delete(txn).await?;
+                        stats.radio_playlist_archives_aggregated += 1;
+                    } else {
+                        let mut active: crate::models::radio_playlist_archives::ActiveModel = arch.into();
+                        active.album_id = Set(Some(target_id));
+                        active.update(txn).await?;
+                        stats.radio_playlist_archives_moved += 1;
                     }
                 }
             }
@@ -344,30 +331,27 @@ pub async fn merge_albums(
                     );
                 }
 
-                for from_id in &from_ids {
-                    let playlists = StaffPlaylist::find()
-                        .filter(StaffPlaylistColumn::AlbumId.eq(*from_id))
-                        .all(txn)
-                        .await?;
+                let playlists = StaffPlaylist::find()
+                    .filter(StaffPlaylistColumn::AlbumId.is_in(from_ids.clone()))
+                    .all(txn)
+                    .await?;
 
-                    for pl in playlists {
-                        let key = (pl.staff_member_id, pl.band_id, pl.song_id);
-                        if let Some(&(target_pl_id, target_spins)) = target_map.get(&key) {
-                            let target_entry = StaffPlaylist::find_by_id(target_pl_id).one(txn).await?
-                                .ok_or(DbErr::RecordNotFound("Target staff playlist entry not found".to_string()))?;
-                            let mut active: crate::models::staff_playlists::ActiveModel = target_entry.into();
-                            active.spins = Set(Some(target_spins.unwrap_or(0) + pl.spins.unwrap_or(0)));
-                            active.update(txn).await?;
+                for pl in playlists {
+                    let key = (pl.staff_member_id, pl.band_id, pl.song_id);
+                    if let Some(&(target_pl_id, target_spins)) = target_map.get(&key) {
+                        StaffPlaylist::update_many()
+                            .filter(StaffPlaylistColumn::Id.eq(target_pl_id))
+                            .col_expr(StaffPlaylistColumn::Spins, Expr::value(Some(target_spins.unwrap_or(0) + pl.spins.unwrap_or(0))))
+                            .exec(txn).await?;
 
-                            let source_active: crate::models::staff_playlists::ActiveModel = pl.into();
-                            source_active.delete(txn).await?;
-                            stats.staff_playlists_aggregated += 1;
-                        } else {
-                            let mut active: crate::models::staff_playlists::ActiveModel = pl.into();
-                            active.album_id = Set(Some(target_id));
-                            active.update(txn).await?;
-                            stats.staff_playlists_moved += 1;
-                        }
+                        let source_active: crate::models::staff_playlists::ActiveModel = pl.into();
+                        source_active.delete(txn).await?;
+                        stats.staff_playlists_aggregated += 1;
+                    } else {
+                        let mut active: crate::models::staff_playlists::ActiveModel = pl.into();
+                        active.album_id = Set(Some(target_id));
+                        active.update(txn).await?;
+                        stats.staff_playlists_moved += 1;
                     }
                 }
             }
@@ -387,30 +371,27 @@ pub async fn merge_albums(
                     );
                 }
 
-                for from_id in &from_ids {
-                    let archives = StaffPlaylistArchive::find()
-                        .filter(StaffPlaylistArchiveColumn::AlbumId.eq(*from_id))
-                        .all(txn)
-                        .await?;
+                let archives = StaffPlaylistArchive::find()
+                    .filter(StaffPlaylistArchiveColumn::AlbumId.is_in(from_ids.clone()))
+                    .all(txn)
+                    .await?;
 
-                    for arch in archives {
-                        let key = (arch.staff_member_id, arch.band_id, arch.song_id, arch.week_ending);
-                        if let Some(&(target_arch_id, target_spins)) = target_map.get(&key) {
-                            let target_entry = StaffPlaylistArchive::find_by_id(target_arch_id).one(txn).await?
-                                .ok_or(DbErr::RecordNotFound("Target staff archive entry not found".to_string()))?;
-                            let mut active: crate::models::staff_playlist_archives::ActiveModel = target_entry.into();
-                            active.spins = Set(Some(target_spins.unwrap_or(0) + arch.spins.unwrap_or(0)));
-                            active.update(txn).await?;
+                for arch in archives {
+                    let key = (arch.staff_member_id, arch.band_id, arch.song_id, arch.week_ending);
+                    if let Some(&(target_arch_id, target_spins)) = target_map.get(&key) {
+                        StaffPlaylistArchive::update_many()
+                            .filter(StaffPlaylistArchiveColumn::Id.eq(target_arch_id))
+                            .col_expr(StaffPlaylistArchiveColumn::Spins, Expr::value(Some(target_spins.unwrap_or(0) + arch.spins.unwrap_or(0))))
+                            .exec(txn).await?;
 
-                            let source_active: crate::models::staff_playlist_archives::ActiveModel = arch.into();
-                            source_active.delete(txn).await?;
-                            stats.staff_playlist_archives_aggregated += 1;
-                        } else {
-                            let mut active: crate::models::staff_playlist_archives::ActiveModel = arch.into();
-                            active.album_id = Set(Some(target_id));
-                            active.update(txn).await?;
-                            stats.staff_playlist_archives_moved += 1;
-                        }
+                        let source_active: crate::models::staff_playlist_archives::ActiveModel = arch.into();
+                        source_active.delete(txn).await?;
+                        stats.staff_playlist_archives_aggregated += 1;
+                    } else {
+                        let mut active: crate::models::staff_playlist_archives::ActiveModel = arch.into();
+                        active.album_id = Set(Some(target_id));
+                        active.update(txn).await?;
+                        stats.staff_playlist_archives_moved += 1;
                     }
                 }
             }
@@ -418,48 +399,42 @@ pub async fn merge_albums(
             // 10. (Skipped — radio_raw_datas has no album_id column)
 
             // 11. Move album rankings (move all)
-            for from_id in &from_ids {
-                let rankings = AlbumRanking::find()
-                    .filter(AlbumRankingColumn::AlbumId.eq(*from_id))
-                    .all(txn)
-                    .await?;
+            let rankings = AlbumRanking::find()
+                .filter(AlbumRankingColumn::AlbumId.is_in(from_ids.clone()))
+                .all(txn)
+                .await?;
 
-                for ranking in rankings {
-                    let mut active: crate::models::album_rankings::ActiveModel = ranking.into();
-                    active.album_id = Set(Some(target_id));
-                    active.update(txn).await?;
-                    stats.rankings_moved += 1;
-                }
+            for ranking in rankings {
+                let mut active: crate::models::album_rankings::ActiveModel = ranking.into();
+                active.album_id = Set(Some(target_id));
+                active.update(txn).await?;
+                stats.rankings_moved += 1;
             }
 
             // 12. Move album total stats (move all)
-            for from_id in &from_ids {
-                let total_stats = AlbumTotalStats::find()
-                    .filter(AlbumTotalStatsColumn::AlbumId.eq(*from_id))
-                    .all(txn)
-                    .await?;
+            let total_stats = AlbumTotalStats::find()
+                .filter(AlbumTotalStatsColumn::AlbumId.is_in(from_ids.clone()))
+                .all(txn)
+                .await?;
 
-                for ts in total_stats {
-                    let mut active: crate::models::album_total_stats::ActiveModel = ts.into();
-                    active.album_id = Set(Some(target_id));
-                    active.update(txn).await?;
-                    stats.total_stats_moved += 1;
-                }
+            for ts in total_stats {
+                let mut active: crate::models::album_total_stats::ActiveModel = ts.into();
+                active.album_id = Set(Some(target_id));
+                active.update(txn).await?;
+                stats.total_stats_moved += 1;
             }
 
             // 13. Move album weekly stats (move all)
-            for from_id in &from_ids {
-                let weekly_stats = AlbumWeeklyStats::find()
-                    .filter(AlbumWeeklyStatsColumn::AlbumId.eq(*from_id))
-                    .all(txn)
-                    .await?;
+            let weekly_stats = AlbumWeeklyStats::find()
+                .filter(AlbumWeeklyStatsColumn::AlbumId.is_in(from_ids.clone()))
+                .all(txn)
+                .await?;
 
-                for ws in weekly_stats {
-                    let mut active: crate::models::album_weekly_stats::ActiveModel = ws.into();
-                    active.album_id = Set(Some(target_id));
-                    active.update(txn).await?;
-                    stats.weekly_stats_moved += 1;
-                }
+            for ws in weekly_stats {
+                let mut active: crate::models::album_weekly_stats::ActiveModel = ws.into();
+                active.album_id = Set(Some(target_id));
+                active.update(txn).await?;
+                stats.weekly_stats_moved += 1;
             }
 
             // 14. Album aliases — dedupe on (band_id, radio_station_id, alias_key)
@@ -474,57 +449,53 @@ pub async fn merge_albums(
                     .map(|a| (a.band_id, a.radio_station_id, a.alias_key))
                     .collect();
 
-                for from_id in &from_ids {
-                    let aliases = AlbumAlias::find()
-                        .filter(AlbumAliasColumn::AlbumId.eq(*from_id))
-                        .all(txn)
-                        .await?;
+                let aliases = AlbumAlias::find()
+                    .filter(AlbumAliasColumn::AlbumId.is_in(from_ids.clone()))
+                    .all(txn)
+                    .await?;
 
-                    for alias in aliases {
-                        let key = (alias.band_id, alias.radio_station_id, alias.alias_key.clone());
-                        if existing_alias_keys.contains(&key) {
-                            let active: crate::models::album_aliases::ActiveModel = alias.into();
-                            active.delete(txn).await?;
-                            stats.aliases_deduped += 1;
-                        } else {
-                            let mut active: crate::models::album_aliases::ActiveModel = alias.into();
-                            active.album_id = Set(target_id);
-                            active.update(txn).await?;
-                            existing_alias_keys.insert(key);
-                            stats.aliases_moved += 1;
-                        }
+                for alias in aliases {
+                    let key = (alias.band_id, alias.radio_station_id, alias.alias_key.clone());
+                    if existing_alias_keys.contains(&key) {
+                        let active: crate::models::album_aliases::ActiveModel = alias.into();
+                        active.delete(txn).await?;
+                        stats.aliases_deduped += 1;
+                    } else {
+                        let mut active: crate::models::album_aliases::ActiveModel = alias.into();
+                        active.album_id = Set(target_id);
+                        active.update(txn).await?;
+                        existing_alias_keys.insert(key);
+                        stats.aliases_moved += 1;
                     }
                 }
             }
 
             // 15-17. Album duplicate candidates — reassign, remove self-refs, deduplicate pairs
             {
-                for from_id in &from_ids {
-                    // Reassign album_id_1 references
-                    let candidates_1 = AlbumDuplicateCandidate::find()
-                        .filter(AlbumDuplicateCandidateColumn::AlbumId1.eq(*from_id))
-                        .all(txn)
-                        .await?;
+                // Reassign album_id_1 references
+                let candidates_1 = AlbumDuplicateCandidate::find()
+                    .filter(AlbumDuplicateCandidateColumn::AlbumId1.is_in(from_ids.clone()))
+                    .all(txn)
+                    .await?;
 
-                    for cand in candidates_1 {
-                        let mut active: crate::models::album_duplicate_candidates::ActiveModel = cand.into();
-                        active.album_id_1 = Set(target_id);
-                        active.update(txn).await?;
-                        stats.duplicate_candidates_updated += 1;
-                    }
+                for cand in candidates_1 {
+                    let mut active: crate::models::album_duplicate_candidates::ActiveModel = cand.into();
+                    active.album_id_1 = Set(target_id);
+                    active.update(txn).await?;
+                    stats.duplicate_candidates_updated += 1;
+                }
 
-                    // Reassign album_id_2 references
-                    let candidates_2 = AlbumDuplicateCandidate::find()
-                        .filter(AlbumDuplicateCandidateColumn::AlbumId2.eq(*from_id))
-                        .all(txn)
-                        .await?;
+                // Reassign album_id_2 references
+                let candidates_2 = AlbumDuplicateCandidate::find()
+                    .filter(AlbumDuplicateCandidateColumn::AlbumId2.is_in(from_ids.clone()))
+                    .all(txn)
+                    .await?;
 
-                    for cand in candidates_2 {
-                        let mut active: crate::models::album_duplicate_candidates::ActiveModel = cand.into();
-                        active.album_id_2 = Set(target_id);
-                        active.update(txn).await?;
-                        stats.duplicate_candidates_updated += 1;
-                    }
+                for cand in candidates_2 {
+                    let mut active: crate::models::album_duplicate_candidates::ActiveModel = cand.into();
+                    active.album_id_2 = Set(target_id);
+                    active.update(txn).await?;
+                    stats.duplicate_candidates_updated += 1;
                 }
 
                 // Remove self-referencing rows (album_id_1 == album_id_2 == target_id)

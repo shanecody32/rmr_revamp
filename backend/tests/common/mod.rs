@@ -442,6 +442,247 @@ pub fn make_test_staff_member(
     }
 }
 
+/// Create a test StaffPlaylistModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_staff_playlist(id: u32, staff_member_id: u32) -> backend::models::staff_playlists::Model {
+    backend::models::staff_playlists::Model {
+        id,
+        staff_member_id: Some(staff_member_id),
+        band_id: None,
+        song_id: None,
+        album_id: None,
+        user_id: None,
+        spins: None,
+        invalid: 0,
+        created: None,
+        modified: None,
+    }
+}
+
+/// Create a test StaffPlaylistArchiveModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_staff_playlist_archive(id: u32, staff_member_id: u32) -> backend::models::staff_playlist_archives::Model {
+    backend::models::staff_playlist_archives::Model {
+        id,
+        staff_member_id: Some(staff_member_id),
+        band_id: None,
+        song_id: None,
+        album_id: None,
+        user_id: None,
+        spins: None,
+        invalid: 0,
+        week_ending: None,
+        created: None,
+        modified: None,
+    }
+}
+
+/// Create a test BandAliasModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_band_alias(id: u32, band_id: u32, name: &str) -> backend::models::band_aliases::Model {
+    backend::models::band_aliases::Model {
+        id,
+        band_id,
+        radio_station_id: None,
+        alias_key: name.to_string(),
+        slug: Some(name.to_lowercase().replace(' ', "-")),
+        sanitized_name: Some(name.to_lowercase()),
+        soundex_key: None,
+        phonetic_key: None,
+        metaphone_key: None,
+        dmetaphone_key: None,
+        dmetaphone_alt_key: None,
+        created: None,
+        modified: None,
+    }
+}
+
+/// Create a test StateAliasModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_state_alias(id: u32, state_id: u32, name: &str) -> backend::models::state_aliases::Model {
+    backend::models::state_aliases::Model {
+        id,
+        state_id,
+        country_id: None,
+        name: name.to_string(),
+        slug: Some(name.to_lowercase().replace(' ', "-")),
+        sanitized_name: Some(name.to_lowercase()),
+        soundex_key: None,
+        phonetic_key: None,
+        metaphone_key: None,
+        dmetaphone_key: None,
+        dmetaphone_alt_key: None,
+        created: None,
+        modified: None,
+    }
+}
+
+/// Create a test BandImageModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_band_image(id: u32, band_id: u32) -> backend::models::band_images::Model {
+    backend::models::band_images::Model {
+        id,
+        band_id: Some(band_id),
+        path: Some("img/bands".to_string()),
+        filename: Some(format!("band_{}.jpg", band_id)),
+        thumbname: None,
+        order: None,
+        created: None,
+        modified: None,
+    }
+}
+
+/// Create a test AlbumsBandsModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_albums_bands(id: u32, album_id: u32, band_id: u32) -> backend::models::albums_bands::Model {
+    backend::models::albums_bands::Model {
+        id,
+        album_id: Some(album_id),
+        band_id: Some(band_id),
+    }
+}
+
+/// Create a test AlbumsSongsModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_albums_songs(id: u32, album_id: u32, song_id: u32) -> backend::models::albums_songs::Model {
+    backend::models::albums_songs::Model {
+        id,
+        album_id,
+        song_id,
+        track_num: Some(1),
+        disc_count: None,
+        disc_number: Some(1),
+        track_count: None,
+        track_number: Some(1),
+    }
+}
+
+/// Create a test BandsSubGenresModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_bands_sub_genres(id: u32, band_id: u32, sub_genre_id: u32) -> backend::models::bands_sub_genres::Model {
+    backend::models::bands_sub_genres::Model {
+        id,
+        band_id: Some(band_id),
+        sub_genre_id: Some(sub_genre_id),
+    }
+}
+
+/// Create a test BandDuplicateCandidateModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_band_duplicate_candidate(
+    id: u32,
+    band_id_1: u32,
+    band_id_2: u32,
+    score: i32,
+) -> backend::models::band_duplicate_candidates::Model {
+    backend::models::band_duplicate_candidates::Model {
+        id,
+        band_id_1,
+        band_id_2,
+        similarity_score: score,
+        match_reasons: None,
+        status: "pending".to_string(),
+        reviewed_by: None,
+        reviewed_at: None,
+        detected_at: chrono::NaiveDateTime::default(),
+        scan_settings: None,
+    }
+}
+
+/// Create a test SongDuplicateCandidateModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_song_duplicate_candidate(
+    id: u32,
+    song_id_1: u32,
+    song_id_2: u32,
+    score: i32,
+) -> backend::models::song_duplicate_candidates::Model {
+    backend::models::song_duplicate_candidates::Model {
+        id,
+        song_id_1,
+        song_id_2,
+        similarity_score: score,
+        match_reasons: None,
+        status: "pending".to_string(),
+        reviewed_by: None,
+        reviewed_at: None,
+        detected_at: chrono::NaiveDateTime::default(),
+        scan_settings: None,
+    }
+}
+
+/// Create a test AlbumAliasModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_album_alias(id: u32, album_id: u32, band_id: u32, name: &str) -> backend::models::album_aliases::Model {
+    backend::models::album_aliases::Model {
+        id,
+        album_id,
+        band_id,
+        radio_station_id: None,
+        alias_key: name.to_string(),
+        slug: Some(name.to_lowercase().replace(' ', "-")),
+        sanitized_name: Some(name.to_lowercase()),
+        soundex_key: None,
+        phonetic_key: None,
+        metaphone_key: None,
+        dmetaphone_key: None,
+        dmetaphone_alt_key: None,
+        created: None,
+        modified: None,
+    }
+}
+
+/// Create a test SongAliasModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_song_alias(id: u32, song_id: u32, band_id: u32, name: &str) -> backend::models::song_aliases::Model {
+    backend::models::song_aliases::Model {
+        id,
+        song_id,
+        band_id,
+        radio_station_id: None,
+        alias_key: name.to_string(),
+        slug: Some(name.to_lowercase().replace(' ', "-")),
+        sanitized_name: Some(name.to_lowercase()),
+        soundex_key: None,
+        phonetic_key: None,
+        metaphone_key: None,
+        dmetaphone_key: None,
+        dmetaphone_alt_key: None,
+        created: None,
+        modified: None,
+    }
+}
+
+/// Create a test LabelAliasModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_label_alias(id: u32, label_id: u32, name: &str) -> backend::models::label_aliases::Model {
+    backend::models::label_aliases::Model {
+        id,
+        label_id,
+        radio_station_id: None,
+        alias_key: name.to_string(),
+        slug: Some(name.to_lowercase().replace(' ', "-")),
+        sanitized_name: Some(name.to_lowercase()),
+        soundex_key: None,
+        phonetic_key: None,
+        metaphone_key: None,
+        dmetaphone_key: None,
+        dmetaphone_alt_key: None,
+        created: None,
+        modified: None,
+    }
+}
+
+/// Create a test AlbumsSubGenresModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_albums_sub_genres(id: u32, album_id: u32, sub_genre_id: u32) -> backend::models::albums_sub_genres::Model {
+    backend::models::albums_sub_genres::Model {
+        id,
+        album_id: Some(album_id),
+        sub_genre_id: Some(sub_genre_id),
+    }
+}
+
 /// Create a test ActionLogModel with minimal fields.
 #[allow(dead_code)]
 pub fn make_test_action_log(

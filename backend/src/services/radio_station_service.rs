@@ -1,5 +1,6 @@
 use crate::models::radio_stations::{Entity as RadioStation, Model as RadioStationModel, ActiveModel as RadioStationActiveModel};
 use sea_orm::*;
+use sea_orm::sea_query::Expr;
 use serde::Deserialize;
 use utoipa::IntoParams;
 use crate::services::types::{PaginatedResponse, PaginationInfo, SimilarityParams, SimilarResult};
@@ -321,9 +322,9 @@ impl RadioStationService {
                 }
 
                 // 2. Move radio_addresses (move all)
-                for from_id in &from_ids {
+                {
                     let addresses = RadioAddress::find()
-                        .filter(RadioAddressColumn::RadioStationId.eq(*from_id))
+                        .filter(RadioAddressColumn::RadioStationId.is_in(from_ids.clone()))
                         .all(txn)
                         .await?;
 
@@ -336,9 +337,9 @@ impl RadioStationService {
                 }
 
                 // 3. Move radio_affiliates (move all)
-                for from_id in &from_ids {
+                {
                     let affiliates = RadioAffiliate::find()
-                        .filter(RadioAffiliateColumn::RadioStationId.eq(*from_id))
+                        .filter(RadioAffiliateColumn::RadioStationId.is_in(from_ids.clone()))
                         .all(txn)
                         .await?;
 
@@ -360,25 +361,23 @@ impl RadioStationService {
                         .filter_map(|e| e.email)
                         .collect();
 
-                    for from_id in &from_ids {
-                        let emails = RadioEmail::find()
-                            .filter(RadioEmailColumn::RadioStationId.eq(*from_id))
-                            .all(txn)
-                            .await?;
+                    let source_emails = RadioEmail::find()
+                        .filter(RadioEmailColumn::RadioStationId.is_in(from_ids.clone()))
+                        .all(txn)
+                        .await?;
 
-                        for email_record in emails {
-                            if let Some(ref email_val) = email_record.email
-                                && existing_emails.contains(email_val) {
-                                    let active: crate::models::radio_emails::ActiveModel = email_record.into();
-                                    active.delete(txn).await?;
-                                    stats.emails_deduped += 1;
-                                    continue;
-                                }
-                            let mut active: crate::models::radio_emails::ActiveModel = email_record.into();
-                            active.radio_station_id = Set(Some(target_id));
-                            active.update(txn).await?;
-                            stats.emails_moved += 1;
-                        }
+                    for email_record in source_emails {
+                        if let Some(ref email_val) = email_record.email
+                            && existing_emails.contains(email_val) {
+                                let active: crate::models::radio_emails::ActiveModel = email_record.into();
+                                active.delete(txn).await?;
+                                stats.emails_deduped += 1;
+                                continue;
+                            }
+                        let mut active: crate::models::radio_emails::ActiveModel = email_record.into();
+                        active.radio_station_id = Set(Some(target_id));
+                        active.update(txn).await?;
+                        stats.emails_moved += 1;
                     }
                 }
 
@@ -392,25 +391,23 @@ impl RadioStationService {
                         .filter_map(|img| img.path)
                         .collect();
 
-                    for from_id in &from_ids {
-                        let images = RadioImage::find()
-                            .filter(RadioImageColumn::RadioStationId.eq(*from_id))
-                            .all(txn)
-                            .await?;
+                    let source_images = RadioImage::find()
+                        .filter(RadioImageColumn::RadioStationId.is_in(from_ids.clone()))
+                        .all(txn)
+                        .await?;
 
-                        for img in images {
-                            if let Some(ref path) = img.path
-                                && existing_paths.contains(path) {
-                                    let active: crate::models::radio_images::ActiveModel = img.into();
-                                    active.delete(txn).await?;
-                                    stats.images_deduped += 1;
-                                    continue;
-                                }
-                            let mut active: crate::models::radio_images::ActiveModel = img.into();
-                            active.radio_station_id = Set(Some(target_id));
-                            active.update(txn).await?;
-                            stats.images_moved += 1;
-                        }
+                    for img in source_images {
+                        if let Some(ref path) = img.path
+                            && existing_paths.contains(path) {
+                                let active: crate::models::radio_images::ActiveModel = img.into();
+                                active.delete(txn).await?;
+                                stats.images_deduped += 1;
+                                continue;
+                            }
+                        let mut active: crate::models::radio_images::ActiveModel = img.into();
+                        active.radio_station_id = Set(Some(target_id));
+                        active.update(txn).await?;
+                        stats.images_moved += 1;
                     }
                 }
 
@@ -424,25 +421,23 @@ impl RadioStationService {
                         .filter_map(|lnk| lnk.link)
                         .collect();
 
-                    for from_id in &from_ids {
-                        let links = RadioLink::find()
-                            .filter(RadioLinkColumn::RadioStationId.eq(*from_id))
-                            .all(txn)
-                            .await?;
+                    let source_links = RadioLink::find()
+                        .filter(RadioLinkColumn::RadioStationId.is_in(from_ids.clone()))
+                        .all(txn)
+                        .await?;
 
-                        for lnk in links {
-                            if let Some(ref url) = lnk.link
-                                && existing_links.contains(url) {
-                                    let active: crate::models::radio_links::ActiveModel = lnk.into();
-                                    active.delete(txn).await?;
-                                    stats.links_deduped += 1;
-                                    continue;
-                                }
-                            let mut active: crate::models::radio_links::ActiveModel = lnk.into();
-                            active.radio_station_id = Set(Some(target_id));
-                            active.update(txn).await?;
-                            stats.links_moved += 1;
-                        }
+                    for lnk in source_links {
+                        if let Some(ref url) = lnk.link
+                            && existing_links.contains(url) {
+                                let active: crate::models::radio_links::ActiveModel = lnk.into();
+                                active.delete(txn).await?;
+                                stats.links_deduped += 1;
+                                continue;
+                            }
+                        let mut active: crate::models::radio_links::ActiveModel = lnk.into();
+                        active.radio_station_id = Set(Some(target_id));
+                        active.update(txn).await?;
+                        stats.links_moved += 1;
                     }
                 }
 
@@ -456,25 +451,23 @@ impl RadioStationService {
                         .filter_map(|p| p.phone)
                         .collect();
 
-                    for from_id in &from_ids {
-                        let phones = RadioPhone::find()
-                            .filter(RadioPhoneColumn::RadioStationId.eq(*from_id))
-                            .all(txn)
-                            .await?;
+                    let source_phones = RadioPhone::find()
+                        .filter(RadioPhoneColumn::RadioStationId.is_in(from_ids.clone()))
+                        .all(txn)
+                        .await?;
 
-                        for phone in phones {
-                            if let Some(ref number) = phone.phone
-                                && existing_phones.contains(number) {
-                                    let active: crate::models::radio_phone_numbers::ActiveModel = phone.into();
-                                    active.delete(txn).await?;
-                                    stats.phone_numbers_deduped += 1;
-                                    continue;
-                                }
-                            let mut active: crate::models::radio_phone_numbers::ActiveModel = phone.into();
-                            active.radio_station_id = Set(Some(target_id));
-                            active.update(txn).await?;
-                            stats.phone_numbers_moved += 1;
-                        }
+                    for phone in source_phones {
+                        if let Some(ref number) = phone.phone
+                            && existing_phones.contains(number) {
+                                let active: crate::models::radio_phone_numbers::ActiveModel = phone.into();
+                                active.delete(txn).await?;
+                                stats.phone_numbers_deduped += 1;
+                                continue;
+                            }
+                        let mut active: crate::models::radio_phone_numbers::ActiveModel = phone.into();
+                        active.radio_station_id = Set(Some(target_id));
+                        active.update(txn).await?;
+                        stats.phone_numbers_moved += 1;
                     }
                 }
 
@@ -487,24 +480,22 @@ impl RadioStationService {
 
                     let mut adopted = target_detail.is_some();
 
-                    for from_id in &from_ids {
-                        let source_details = RadioInternetDetail::find()
-                            .filter(RadioInternetDetailColumn::RadioStationId.eq(*from_id))
-                            .all(txn)
-                            .await?;
+                    let source_details = RadioInternetDetail::find()
+                        .filter(RadioInternetDetailColumn::RadioStationId.is_in(from_ids.clone()))
+                        .all(txn)
+                        .await?;
 
-                        for detail in source_details {
-                            if !adopted {
-                                let mut active: crate::models::radio_internet_details::ActiveModel = detail.into();
-                                active.radio_station_id = Set(Some(target_id));
-                                active.update(txn).await?;
-                                adopted = true;
-                                stats.internet_details_handled += 1;
-                            } else {
-                                let active: crate::models::radio_internet_details::ActiveModel = detail.into();
-                                active.delete(txn).await?;
-                                stats.internet_details_handled += 1;
-                            }
+                    for detail in source_details {
+                        if !adopted {
+                            let mut active: crate::models::radio_internet_details::ActiveModel = detail.into();
+                            active.radio_station_id = Set(Some(target_id));
+                            active.update(txn).await?;
+                            adopted = true;
+                            stats.internet_details_handled += 1;
+                        } else {
+                            let active: crate::models::radio_internet_details::ActiveModel = detail.into();
+                            active.delete(txn).await?;
+                            stats.internet_details_handled += 1;
                         }
                     }
                 }
@@ -518,24 +509,22 @@ impl RadioStationService {
 
                     let mut adopted = target_detail.is_some();
 
-                    for from_id in &from_ids {
-                        let source_details = RadioSatelliteDetail::find()
-                            .filter(RadioSatelliteDetailColumn::RadioStationId.eq(*from_id))
-                            .all(txn)
-                            .await?;
+                    let source_details = RadioSatelliteDetail::find()
+                        .filter(RadioSatelliteDetailColumn::RadioStationId.is_in(from_ids.clone()))
+                        .all(txn)
+                        .await?;
 
-                        for detail in source_details {
-                            if !adopted {
-                                let mut active: crate::models::radio_satellite_details::ActiveModel = detail.into();
-                                active.radio_station_id = Set(Some(target_id));
-                                active.update(txn).await?;
-                                adopted = true;
-                                stats.satellite_details_handled += 1;
-                            } else {
-                                let active: crate::models::radio_satellite_details::ActiveModel = detail.into();
-                                active.delete(txn).await?;
-                                stats.satellite_details_handled += 1;
-                            }
+                    for detail in source_details {
+                        if !adopted {
+                            let mut active: crate::models::radio_satellite_details::ActiveModel = detail.into();
+                            active.radio_station_id = Set(Some(target_id));
+                            active.update(txn).await?;
+                            adopted = true;
+                            stats.satellite_details_handled += 1;
+                        } else {
+                            let active: crate::models::radio_satellite_details::ActiveModel = detail.into();
+                            active.delete(txn).await?;
+                            stats.satellite_details_handled += 1;
                         }
                     }
                 }
@@ -549,24 +538,22 @@ impl RadioStationService {
 
                     let mut adopted = target_detail.is_some();
 
-                    for from_id in &from_ids {
-                        let source_details = RadioSyndicatedDetail::find()
-                            .filter(RadioSyndicatedDetailColumn::RadioStationId.eq(*from_id))
-                            .all(txn)
-                            .await?;
+                    let source_details = RadioSyndicatedDetail::find()
+                        .filter(RadioSyndicatedDetailColumn::RadioStationId.is_in(from_ids.clone()))
+                        .all(txn)
+                        .await?;
 
-                        for detail in source_details {
-                            if !adopted {
-                                let mut active: crate::models::radio_syndicated_details::ActiveModel = detail.into();
-                                active.radio_station_id = Set(Some(target_id));
-                                active.update(txn).await?;
-                                adopted = true;
-                                stats.syndicated_details_handled += 1;
-                            } else {
-                                let active: crate::models::radio_syndicated_details::ActiveModel = detail.into();
-                                active.delete(txn).await?;
-                                stats.syndicated_details_handled += 1;
-                            }
+                    for detail in source_details {
+                        if !adopted {
+                            let mut active: crate::models::radio_syndicated_details::ActiveModel = detail.into();
+                            active.radio_station_id = Set(Some(target_id));
+                            active.update(txn).await?;
+                            adopted = true;
+                            stats.syndicated_details_handled += 1;
+                        } else {
+                            let active: crate::models::radio_syndicated_details::ActiveModel = detail.into();
+                            active.delete(txn).await?;
+                            stats.syndicated_details_handled += 1;
                         }
                     }
                 }
@@ -580,32 +567,30 @@ impl RadioStationService {
 
                     let mut adopted = target_detail.is_some();
 
-                    for from_id in &from_ids {
-                        let source_details = RadioTerrestrialDetail::find()
-                            .filter(RadioTerrestrialDetailColumn::RadioStationId.eq(*from_id))
-                            .all(txn)
-                            .await?;
+                    let source_details = RadioTerrestrialDetail::find()
+                        .filter(RadioTerrestrialDetailColumn::RadioStationId.is_in(from_ids.clone()))
+                        .all(txn)
+                        .await?;
 
-                        for detail in source_details {
-                            if !adopted {
-                                let mut active: crate::models::radio_terrestrial_details::ActiveModel = detail.into();
-                                active.radio_station_id = Set(Some(target_id));
-                                active.update(txn).await?;
-                                adopted = true;
-                                stats.terrestrial_details_handled += 1;
-                            } else {
-                                let active: crate::models::radio_terrestrial_details::ActiveModel = detail.into();
-                                active.delete(txn).await?;
-                                stats.terrestrial_details_handled += 1;
-                            }
+                    for detail in source_details {
+                        if !adopted {
+                            let mut active: crate::models::radio_terrestrial_details::ActiveModel = detail.into();
+                            active.radio_station_id = Set(Some(target_id));
+                            active.update(txn).await?;
+                            adopted = true;
+                            stats.terrestrial_details_handled += 1;
+                        } else {
+                            let active: crate::models::radio_terrestrial_details::ActiveModel = detail.into();
+                            active.delete(txn).await?;
+                            stats.terrestrial_details_handled += 1;
                         }
                     }
                 }
 
                 // 12. staff_members — reassign radio_station_id
-                for from_id in &from_ids {
+                {
                     let staff = StaffMember::find()
-                        .filter(StaffMemberColumn::RadioStationId.eq(*from_id))
+                        .filter(StaffMemberColumn::RadioStationId.is_in(from_ids.clone()))
                         .all(txn)
                         .await?;
 
@@ -627,24 +612,22 @@ impl RadioStationService {
                         .filter_map(|sg| sg.sub_genre_id)
                         .collect();
 
-                    for from_id in &from_ids {
-                        let sub_genres = RadioStationSubGenre::find()
-                            .filter(RadioStationSubGenreColumn::RadioStationId.eq(*from_id))
-                            .all(txn)
-                            .await?;
+                    let source_sub_genres = RadioStationSubGenre::find()
+                        .filter(RadioStationSubGenreColumn::RadioStationId.is_in(from_ids.clone()))
+                        .all(txn)
+                        .await?;
 
-                        for sg in sub_genres {
-                            if let Some(sg_id) = sg.sub_genre_id
-                                && existing_sub_genres.contains(&sg_id) {
-                                    let active: crate::models::radio_stations_sub_genres::ActiveModel = sg.into();
-                                    active.delete(txn).await?;
-                                    continue;
-                                }
-                            let mut active: crate::models::radio_stations_sub_genres::ActiveModel = sg.into();
-                            active.radio_station_id = Set(Some(target_id));
-                            active.update(txn).await?;
-                            stats.sub_genres_added += 1;
-                        }
+                    for sg in source_sub_genres {
+                        if let Some(sg_id) = sg.sub_genre_id
+                            && existing_sub_genres.contains(&sg_id) {
+                                let active: crate::models::radio_stations_sub_genres::ActiveModel = sg.into();
+                                active.delete(txn).await?;
+                                continue;
+                            }
+                        let mut active: crate::models::radio_stations_sub_genres::ActiveModel = sg.into();
+                        active.radio_station_id = Set(Some(target_id));
+                        active.update(txn).await?;
+                        stats.sub_genres_added += 1;
                     }
                 }
 
@@ -658,25 +641,23 @@ impl RadioStationService {
                         .filter_map(|u| u.user_id)
                         .collect();
 
-                    for from_id in &from_ids {
-                        let users = RadioStationUser::find()
-                            .filter(RadioStationUserColumn::RadioStationId.eq(*from_id))
-                            .all(txn)
-                            .await?;
+                    let source_users = RadioStationUser::find()
+                        .filter(RadioStationUserColumn::RadioStationId.is_in(from_ids.clone()))
+                        .all(txn)
+                        .await?;
 
-                        for usr in users {
-                            if let Some(uid) = usr.user_id
-                                && existing_users.contains(&uid) {
-                                    let active: crate::models::radio_stations_users::ActiveModel = usr.into();
-                                    active.delete(txn).await?;
-                                    stats.users_deduped += 1;
-                                    continue;
-                                }
-                            let mut active: crate::models::radio_stations_users::ActiveModel = usr.into();
-                            active.radio_station_id = Set(Some(target_id));
-                            active.update(txn).await?;
-                            stats.users_moved += 1;
-                        }
+                    for usr in source_users {
+                        if let Some(uid) = usr.user_id
+                            && existing_users.contains(&uid) {
+                                let active: crate::models::radio_stations_users::ActiveModel = usr.into();
+                                active.delete(txn).await?;
+                                stats.users_deduped += 1;
+                                continue;
+                            }
+                        let mut active: crate::models::radio_stations_users::ActiveModel = usr.into();
+                        active.radio_station_id = Set(Some(target_id));
+                        active.update(txn).await?;
+                        stats.users_moved += 1;
                     }
                 }
 
@@ -696,33 +677,30 @@ impl RadioStationService {
                         );
                     }
 
-                    for from_id in &from_ids {
-                        let playlists = RadioPlaylist::find()
-                            .filter(RadioPlaylistColumn::RadioStationId.eq(*from_id))
-                            .all(txn)
-                            .await?;
+                    let source_playlists = RadioPlaylist::find()
+                        .filter(RadioPlaylistColumn::RadioStationId.is_in(from_ids.clone()))
+                        .all(txn)
+                        .await?;
 
-                        for pl in playlists {
-                            let key = (pl.band_id, pl.album_id, pl.song_id);
-                            if let Some(&(target_pl_id, target_spins, target_sub_spins)) = target_map.get(&key) {
-                                // Aggregate: sum spins into target, delete source
-                                let target_entry = RadioPlaylist::find_by_id(target_pl_id).one(txn).await?
-                                    .ok_or(DbErr::RecordNotFound("Target playlist entry not found".to_string()))?;
-                                let mut active: crate::models::radio_playlists::ActiveModel = target_entry.into();
-                                active.spins = Set(target_spins + pl.spins);
-                                active.subtract_spins = Set(target_sub_spins + pl.subtract_spins);
-                                active.update(txn).await?;
+                    for pl in source_playlists {
+                        let key = (pl.band_id, pl.album_id, pl.song_id);
+                        if let Some(&(target_pl_id, target_spins, target_sub_spins)) = target_map.get(&key) {
+                            // Aggregate: sum spins into target, delete source
+                            RadioPlaylist::update_many()
+                                .filter(RadioPlaylistColumn::Id.eq(target_pl_id))
+                                .col_expr(RadioPlaylistColumn::Spins, Expr::value(target_spins + pl.spins))
+                                .col_expr(RadioPlaylistColumn::SubtractSpins, Expr::value(target_sub_spins + pl.subtract_spins))
+                                .exec(txn).await?;
 
-                                let source_active: crate::models::radio_playlists::ActiveModel = pl.into();
-                                source_active.delete(txn).await?;
-                                stats.radio_playlists_aggregated += 1;
-                            } else {
-                                // No match — move to target station
-                                let mut active: crate::models::radio_playlists::ActiveModel = pl.into();
-                                active.radio_station_id = Set(Some(target_id));
-                                active.update(txn).await?;
-                                stats.radio_playlists_moved += 1;
-                            }
+                            let source_active: crate::models::radio_playlists::ActiveModel = pl.into();
+                            source_active.delete(txn).await?;
+                            stats.radio_playlists_aggregated += 1;
+                        } else {
+                            // No match — move to target station
+                            let mut active: crate::models::radio_playlists::ActiveModel = pl.into();
+                            active.radio_station_id = Set(Some(target_id));
+                            active.update(txn).await?;
+                            stats.radio_playlists_moved += 1;
                         }
                     }
                 }
@@ -742,39 +720,36 @@ impl RadioStationService {
                         );
                     }
 
-                    for from_id in &from_ids {
-                        let archives = RadioPlaylistArchive::find()
-                            .filter(RadioPlaylistArchiveColumn::RadioStationId.eq(*from_id))
-                            .all(txn)
-                            .await?;
+                    let source_archives = RadioPlaylistArchive::find()
+                        .filter(RadioPlaylistArchiveColumn::RadioStationId.is_in(from_ids.clone()))
+                        .all(txn)
+                        .await?;
 
-                        for arch in archives {
-                            let key = (arch.band_id, arch.album_id, arch.song_id, arch.week_ending);
-                            if let Some(&(target_arch_id, target_spins, target_sub_spins)) = target_map.get(&key) {
-                                let target_entry = RadioPlaylistArchive::find_by_id(target_arch_id).one(txn).await?
-                                    .ok_or(DbErr::RecordNotFound("Target archive entry not found".to_string()))?;
-                                let mut active: crate::models::radio_playlist_archives::ActiveModel = target_entry.into();
-                                active.spins = Set(target_spins + arch.spins);
-                                active.subtract_spins = Set(target_sub_spins + arch.subtract_spins);
-                                active.update(txn).await?;
+                    for arch in source_archives {
+                        let key = (arch.band_id, arch.album_id, arch.song_id, arch.week_ending);
+                        if let Some(&(target_arch_id, target_spins, target_sub_spins)) = target_map.get(&key) {
+                            RadioPlaylistArchive::update_many()
+                                .filter(RadioPlaylistArchiveColumn::Id.eq(target_arch_id))
+                                .col_expr(RadioPlaylistArchiveColumn::Spins, Expr::value(target_spins + arch.spins))
+                                .col_expr(RadioPlaylistArchiveColumn::SubtractSpins, Expr::value(target_sub_spins + arch.subtract_spins))
+                                .exec(txn).await?;
 
-                                let source_active: crate::models::radio_playlist_archives::ActiveModel = arch.into();
-                                source_active.delete(txn).await?;
-                                stats.radio_playlist_archives_aggregated += 1;
-                            } else {
-                                let mut active: crate::models::radio_playlist_archives::ActiveModel = arch.into();
-                                active.radio_station_id = Set(Some(target_id));
-                                active.update(txn).await?;
-                                stats.radio_playlist_archives_moved += 1;
-                            }
+                            let source_active: crate::models::radio_playlist_archives::ActiveModel = arch.into();
+                            source_active.delete(txn).await?;
+                            stats.radio_playlist_archives_aggregated += 1;
+                        } else {
+                            let mut active: crate::models::radio_playlist_archives::ActiveModel = arch.into();
+                            active.radio_station_id = Set(Some(target_id));
+                            active.update(txn).await?;
+                            stats.radio_playlist_archives_moved += 1;
                         }
                     }
                 }
 
                 // 17. radio_raw_datas — move all
-                for from_id in &from_ids {
+                {
                     let raw_datas = RadioRawData::find()
-                        .filter(RadioRawDataColumn::RadioStationId.eq(*from_id))
+                        .filter(RadioRawDataColumn::RadioStationId.is_in(from_ids.clone()))
                         .all(txn)
                         .await?;
 
@@ -787,9 +762,9 @@ impl RadioStationService {
                 }
 
                 // 18. song_aliases — reassign radio_station_id
-                for from_id in &from_ids {
+                {
                     let aliases = SongAlias::find()
-                        .filter(SongAliasColumn::RadioStationId.eq(*from_id))
+                        .filter(SongAliasColumn::RadioStationId.is_in(from_ids.clone()))
                         .all(txn)
                         .await?;
 
@@ -802,9 +777,9 @@ impl RadioStationService {
                 }
 
                 // 19. album_aliases — reassign radio_station_id
-                for from_id in &from_ids {
+                {
                     let aliases = AlbumAlias::find()
-                        .filter(AlbumAliasColumn::RadioStationId.eq(*from_id))
+                        .filter(AlbumAliasColumn::RadioStationId.is_in(from_ids.clone()))
                         .all(txn)
                         .await?;
 
@@ -826,57 +801,53 @@ impl RadioStationService {
                         .map(|a| a.name)
                         .collect();
 
-                    for from_id in &from_ids {
-                        let aliases = RadioStationAlias::find()
-                            .filter(RadioStationAliasColumn::RadioStationId.eq(*from_id))
-                            .all(txn)
-                            .await?;
+                    let source_aliases = RadioStationAlias::find()
+                        .filter(RadioStationAliasColumn::RadioStationId.is_in(from_ids.clone()))
+                        .all(txn)
+                        .await?;
 
-                        for alias in aliases {
-                            if existing_names.contains(&alias.name) {
-                                let active: crate::models::radio_station_aliases::ActiveModel = alias.into();
-                                active.delete(txn).await?;
-                                stats.station_aliases_deduped += 1;
-                                continue;
-                            }
-                            let alias_name = alias.name.clone();
-                            let mut active: crate::models::radio_station_aliases::ActiveModel = alias.into();
-                            active.radio_station_id = Set(target_id);
-                            active.update(txn).await?;
-                            existing_names.insert(alias_name);
-                            stats.station_aliases_moved += 1;
+                    for alias in source_aliases {
+                        if existing_names.contains(&alias.name) {
+                            let active: crate::models::radio_station_aliases::ActiveModel = alias.into();
+                            active.delete(txn).await?;
+                            stats.station_aliases_deduped += 1;
+                            continue;
                         }
+                        let alias_name = alias.name.clone();
+                        let mut active: crate::models::radio_station_aliases::ActiveModel = alias.into();
+                        active.radio_station_id = Set(target_id);
+                        active.update(txn).await?;
+                        existing_names.insert(alias_name);
+                        stats.station_aliases_moved += 1;
                     }
                 }
 
                 // 21-23. radio_station_duplicate_candidates — reassign, self-ref, pair dedup
                 {
-                    for from_id in &from_ids {
-                        // Reassign radio_station_id_1 references
-                        let candidates_1 = RadioStationDuplicateCandidate::find()
-                            .filter(RadioStationDuplicateCandidateColumn::RadioStationId1.eq(*from_id))
-                            .all(txn)
-                            .await?;
+                    // Reassign radio_station_id_1 references
+                    let candidates_1 = RadioStationDuplicateCandidate::find()
+                        .filter(RadioStationDuplicateCandidateColumn::RadioStationId1.is_in(from_ids.clone()))
+                        .all(txn)
+                        .await?;
 
-                        for cand in candidates_1 {
-                            let mut active: crate::models::radio_station_duplicate_candidates::ActiveModel = cand.into();
-                            active.radio_station_id_1 = Set(target_id);
-                            active.update(txn).await?;
-                            stats.duplicate_candidates_updated += 1;
-                        }
+                    for cand in candidates_1 {
+                        let mut active: crate::models::radio_station_duplicate_candidates::ActiveModel = cand.into();
+                        active.radio_station_id_1 = Set(target_id);
+                        active.update(txn).await?;
+                        stats.duplicate_candidates_updated += 1;
+                    }
 
-                        // Reassign radio_station_id_2 references
-                        let candidates_2 = RadioStationDuplicateCandidate::find()
-                            .filter(RadioStationDuplicateCandidateColumn::RadioStationId2.eq(*from_id))
-                            .all(txn)
-                            .await?;
+                    // Reassign radio_station_id_2 references
+                    let candidates_2 = RadioStationDuplicateCandidate::find()
+                        .filter(RadioStationDuplicateCandidateColumn::RadioStationId2.is_in(from_ids.clone()))
+                        .all(txn)
+                        .await?;
 
-                        for cand in candidates_2 {
-                            let mut active: crate::models::radio_station_duplicate_candidates::ActiveModel = cand.into();
-                            active.radio_station_id_2 = Set(target_id);
-                            active.update(txn).await?;
-                            stats.duplicate_candidates_updated += 1;
-                        }
+                    for cand in candidates_2 {
+                        let mut active: crate::models::radio_station_duplicate_candidates::ActiveModel = cand.into();
+                        active.radio_station_id_2 = Set(target_id);
+                        active.update(txn).await?;
+                        stats.duplicate_candidates_updated += 1;
                     }
 
                     // Remove self-referencing rows (radio_station_id_1 == radio_station_id_2 == target_id)

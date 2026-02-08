@@ -69,11 +69,11 @@ export const mergeBands = async (data: MergeBandsRequest): Promise<MergeResult> 
 
 export const fetchBandById = async (id: number): Promise<BandWithDiscographyResponse> => {
     try {
-        // First fetch the full band details
-        const bandResponse = await api.get<BandResponse>(`/bands/${id}`);
-
-        // Then fetch the discography
-        const discographyResponse = await api.get<BandWithDiscographyResponse>(`/bands/${id}/discography`);
+        // Fetch band details and discography in parallel
+        const [bandResponse, discographyResponse] = await Promise.all([
+            api.get<BandResponse>(`/bands/${id}`),
+            api.get<BandWithDiscographyResponse>(`/bands/${id}/discography`),
+        ]);
 
         // Merge the responses
         return {
@@ -169,14 +169,10 @@ export const fetchBands = async (params: FetchBandsParams): Promise<{
             queryParams.sort_ascending = params.sort_ascending !== false;
         }
 
-        console.log('[Bands REST] Request params:', queryParams);
-
         const response = await api.get<{
             results: BandResponse[];
             pagination: PaginationResponse;
         }>('/bands', { params: queryParams });
-
-        console.log('[Bands REST] Response:', response.data);
 
         // Map 'results' to 'data' for consistency with frontend expectations
         return {

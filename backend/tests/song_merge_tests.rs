@@ -153,23 +153,22 @@ mod empty_merge {
         // Q1: pre-txn find
         builder = builder.append_query_results(vec![vec![target.clone()]]);
         // null merged_data → skip update block
-        // With 2 sources, each secondary table query runs per source:
-        // Performers: target(1) + source(2)(1) + source(3)(1) = 3
-        // AlbumsSongs: target(1) + source(2)(1) + source(3)(1) = 3
-        // RadioPlaylist: target(1) + source(2)(1) + source(3)(1) = 3
-        // RadioPlaylistArchive: target(1) + source(2)(1) + source(3)(1) = 3
-        // StaffPlaylist: target(1) + source(2)(1) + source(3)(1) = 3
-        // StaffPlaylistArchive: target(1) + source(2)(1) + source(3)(1) = 3
-        // RadioRawData: source(2)(1) + source(3)(1) = 2
-        // SongRanking: source(2)(1) + source(3)(1) = 2
-        // SongTotalStats: source(2)(1) + source(3)(1) = 2
-        // SongWeeklyStats: source(2)(1) + source(3)(1) = 2
-        // TempSongTotalStats: source(2)(1) + source(3)(1) = 2
-        // SongAlias: target(1) + source(2)(1) + source(3)(1) = 3
-        // DupCand: source(2)_id1(1) + source(2)_id2(1) + source(3)_id1(1) + source(3)_id2(1)
-        //        + self_refs(1) + all_target(1) = 6
-        // Total: 3*6 + 2*5 + 3 + 6 = 37
-        for _ in 0..37 {
+        // With batch is_in() queries (2 sources):
+        // Performers: target(1) + source_batch(1) = 2
+        // AlbumsSongs: target(1) + source_batch(1) = 2
+        // RadioPlaylist: target(1) + source_batch(1) = 2
+        // RadioPlaylistArchive: target(1) + source_batch(1) = 2
+        // StaffPlaylist: target(1) + source_batch(1) = 2
+        // StaffPlaylistArchive: target(1) + source_batch(1) = 2
+        // RadioRawData: source_batch(1) = 1
+        // SongRanking: source_batch(1) = 1
+        // SongTotalStats: source_batch(1) = 1
+        // SongWeeklyStats: source_batch(1) = 1
+        // TempSongTotalStats: source_batch(1) = 1
+        // SongAlias: target(1) + source_batch(1) = 2
+        // DupCand: id1_batch(1) + id2_batch(1) + self_refs(1) + all_target(1) = 4
+        // Total: 2*6 + 1*5 + 2 + 4 = 23
+        for _ in 0..23 {
             builder = builder.append_query_results(vec![Vec::<SongModel>::new()]);
         }
         // E1: Song::delete_by_id(2).exec

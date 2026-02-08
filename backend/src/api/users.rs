@@ -1,14 +1,23 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::get,
     Json, Router,
 };
 use crate::services::user_service::UserService;
+use crate::services::types::PaginatedResponse;
 use crate::views::ApiError;
 use crate::job_state::AppState;
 use crate::models::users::Model as User;
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize)]
+pub struct UserFilterParams {
+    pub page: Option<u64>,
+    pub page_size: Option<u64>,
+    pub name: Option<String>,
+}
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -19,14 +28,24 @@ pub fn router() -> Router<AppState> {
 #[utoipa::path(
     get,
     path = "/users",
+    params(
+        ("page" = Option<u64>, Query, description = "Page number (1-based)"),
+        ("page_size" = Option<u64>, Query, description = "Items per page"),
+        ("name" = Option<String>, Query, description = "Filter by email"),
+    ),
     responses(
-        (status = 200, description = "List all users", body = [User]),
+        (status = 200, description = "Paginated list of users", body = PaginatedResponse<User>),
         (status = 500, description = "Internal server error")
     )
 )]
-pub(crate) async fn get_users(State(state): State<AppState>) -> impl IntoResponse {
-    match UserService::get_all_users(&state.db).await {
-        Ok(users) => (StatusCode::OK, Json(users)).into_response(),
+pub(crate) async fn get_users(
+    State(state): State<AppState>,
+    Query(params): Query<UserFilterParams>,
+) -> impl IntoResponse {
+    let page = params.page.unwrap_or(1);
+    let page_size = params.page_size.unwrap_or(25);
+    match UserService::get_users(&state.db, params.name, page, page_size).await {
+        Ok(response) => (StatusCode::OK, Json(response)).into_response(),
         Err(e) => ApiError::from(e).into_response(),
     }
 }

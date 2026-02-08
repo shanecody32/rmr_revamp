@@ -21,6 +21,7 @@ use crate::models::band_duplicate_candidates::{Entity as BandDuplicateCandidate,
 use crate::services::action_log_service::ActionLogService;
 use super::types::{MergeBandsRequest, MergeResult, MergeStats, SongDuplicate};
 use sea_orm::*;
+use sea_orm::sea_query::Expr;
 use std::collections::{HashMap, HashSet};
 
 // Type aliases for complex HashMap types used in playlist aggregation
@@ -156,13 +157,13 @@ pub async fn merge_bands(
                 .filter_map(|img| img.path)
                 .collect();
 
-            for from_id in &from_ids {
-                let images = BandImage::find()
-                    .filter(BandImageColumn::BandId.eq(*from_id))
+            {
+                let all_images = BandImage::find()
+                    .filter(BandImageColumn::BandId.is_in(from_ids.clone()))
                     .all(txn)
                     .await?;
 
-                for img in images {
+                for img in all_images {
                     if let Some(ref path) = img.path
                         && existing_paths.contains(path) {
                             continue;
@@ -183,13 +184,13 @@ pub async fn merge_bands(
                 .filter_map(|lnk| lnk.link)
                 .collect();
 
-            for from_id in &from_ids {
-                let links = BandLink::find()
-                    .filter(BandLinkColumn::BandId.eq(*from_id))
+            {
+                let all_links = BandLink::find()
+                    .filter(BandLinkColumn::BandId.is_in(from_ids.clone()))
                     .all(txn)
                     .await?;
 
-                for lnk in links {
+                for lnk in all_links {
                     if let Some(ref url) = lnk.link
                         && existing_links.contains(url) {
                             continue;
@@ -207,13 +208,13 @@ pub async fn merge_bands(
                 .one(txn)
                 .await?;
 
-            for from_id in &from_ids {
-                let from_contacts = BandContact::find()
-                    .filter(BandContactColumn::BandId.eq(*from_id))
+            {
+                let all_from_contacts = BandContact::find()
+                    .filter(BandContactColumn::BandId.is_in(from_ids.clone()))
                     .all(txn)
                     .await?;
 
-                for contact in from_contacts {
+                for contact in all_from_contacts {
                     if target_contact.is_none() {
                         let mut active: crate::models::band_contact::ActiveModel = contact.into();
                         active.band_id = Set(Some(target_id));
@@ -234,13 +235,13 @@ pub async fn merge_bands(
                 .map(|a| a.alias_key)
                 .collect();
 
-            for from_id in &from_ids {
-                let aliases = BandAlias::find()
-                    .filter(BandAliasColumn::BandId.eq(*from_id))
+            {
+                let all_aliases = BandAlias::find()
+                    .filter(BandAliasColumn::BandId.is_in(from_ids.clone()))
                     .all(txn)
                     .await?;
 
-                for alias in aliases {
+                for alias in all_aliases {
                     if existing_aliases.contains(&alias.alias_key) {
                         let active: crate::models::band_aliases::ActiveModel = alias.into();
                         active.delete(txn).await?;
@@ -264,13 +265,13 @@ pub async fn merge_bands(
                 .filter_map(|s| s.name.clone().map(|n| (n.to_lowercase(), s.id)))
                 .collect();
 
-            for from_id in &from_ids {
-                let songs = Song::find()
-                    .filter(SongColumn::BandId.eq(*from_id))
+            {
+                let all_songs = Song::find()
+                    .filter(SongColumn::BandId.is_in(from_ids.clone()))
                     .all(txn)
                     .await?;
 
-                for song in songs {
+                for song in all_songs {
                     if let Some(ref name) = song.name
                         && let Some(&target_song_id) = existing_songs.get(&name.to_lowercase()) {
                             duplicate_songs.push(SongDuplicate {
@@ -297,13 +298,13 @@ pub async fn merge_bands(
                 .filter_map(|ab| ab.album_id.map(|id| (id, String::new())))
                 .collect();
 
-            for from_id in &from_ids {
-                let album_bands = AlbumsBands::find()
-                    .filter(AlbumsBandsColumn::BandId.eq(*from_id))
+            {
+                let all_album_bands = AlbumsBands::find()
+                    .filter(AlbumsBandsColumn::BandId.is_in(from_ids.clone()))
                     .all(txn)
                     .await?;
 
-                for ab in album_bands {
+                for ab in all_album_bands {
                     if let Some(album_id) = ab.album_id
                         && existing_albums.contains_key(&album_id) {
                             let active: crate::models::albums_bands::ActiveModel = ab.into();
@@ -318,13 +319,13 @@ pub async fn merge_bands(
             }
 
             // 8. Move reviews
-            for from_id in &from_ids {
-                let reviews = Review::find()
-                    .filter(ReviewColumn::BandId.eq(*from_id))
+            {
+                let all_reviews = Review::find()
+                    .filter(ReviewColumn::BandId.is_in(from_ids.clone()))
                     .all(txn)
                     .await?;
 
-                for review in reviews {
+                for review in all_reviews {
                     let mut active: crate::models::reviews::ActiveModel = review.into();
                     active.band_id = Set(Some(target_id));
                     active.update(txn).await?;
@@ -341,13 +342,13 @@ pub async fn merge_bands(
                 .filter_map(|bu| bu.user_id)
                 .collect();
 
-            for from_id in &from_ids {
-                let band_users = BandsUsers::find()
-                    .filter(BandsUsersColumn::BandId.eq(*from_id))
+            {
+                let all_band_users = BandsUsers::find()
+                    .filter(BandsUsersColumn::BandId.is_in(from_ids.clone()))
                     .all(txn)
                     .await?;
 
-                for bu in band_users {
+                for bu in all_band_users {
                     if let Some(user_id) = bu.user_id
                         && existing_users.contains(&user_id) {
                             let active: crate::models::bands_users::ActiveModel = bu.into();
@@ -370,13 +371,13 @@ pub async fn merge_bands(
                 .filter_map(|bsg| bsg.sub_genre_id)
                 .collect();
 
-            for from_id in &from_ids {
-                let band_sub_genres = BandsSubGenres::find()
-                    .filter(BandsSubGenresColumn::BandId.eq(*from_id))
+            {
+                let all_band_sub_genres = BandsSubGenres::find()
+                    .filter(BandsSubGenresColumn::BandId.is_in(from_ids.clone()))
                     .all(txn)
                     .await?;
 
-                for bsg in band_sub_genres {
+                for bsg in all_band_sub_genres {
                     if let Some(sg_id) = bsg.sub_genre_id
                         && existing_sub_genres.contains(&sg_id) {
                             let active: crate::models::bands_sub_genres::ActiveModel = bsg.into();
@@ -406,22 +407,21 @@ pub async fn merge_bands(
                     );
                 }
 
-                for from_id in &from_ids {
-                    let playlists = RadioPlaylist::find()
-                        .filter(RadioPlaylistColumn::BandId.eq(*from_id))
+                {
+                    let all_playlists = RadioPlaylist::find()
+                        .filter(RadioPlaylistColumn::BandId.is_in(from_ids.clone()))
                         .all(txn)
                         .await?;
 
-                    for pl in playlists {
+                    for pl in all_playlists {
                         let key = (pl.radio_station_id, pl.album_id, pl.song_id);
                         if let Some(&(target_pl_id, target_spins, target_sub_spins)) = target_map.get(&key) {
                             // Aggregate: sum spins into target, delete source
-                            let target_entry = RadioPlaylist::find_by_id(target_pl_id).one(txn).await?
-                                .ok_or(DbErr::RecordNotFound("Target playlist entry not found".to_string()))?;
-                            let mut active: crate::models::radio_playlists::ActiveModel = target_entry.into();
-                            active.spins = Set(target_spins + pl.spins);
-                            active.subtract_spins = Set(target_sub_spins + pl.subtract_spins);
-                            active.update(txn).await?;
+                            RadioPlaylist::update_many()
+                                .filter(RadioPlaylistColumn::Id.eq(target_pl_id))
+                                .col_expr(RadioPlaylistColumn::Spins, Expr::value(target_spins + pl.spins))
+                                .col_expr(RadioPlaylistColumn::SubtractSpins, Expr::value(target_sub_spins + pl.subtract_spins))
+                                .exec(txn).await?;
 
                             let source_active: crate::models::radio_playlists::ActiveModel = pl.into();
                             source_active.delete(txn).await?;
@@ -453,21 +453,20 @@ pub async fn merge_bands(
                     );
                 }
 
-                for from_id in &from_ids {
-                    let archives = RadioPlaylistArchive::find()
-                        .filter(RadioPlaylistArchiveColumn::BandId.eq(*from_id))
+                {
+                    let all_archives = RadioPlaylistArchive::find()
+                        .filter(RadioPlaylistArchiveColumn::BandId.is_in(from_ids.clone()))
                         .all(txn)
                         .await?;
 
-                    for arch in archives {
+                    for arch in all_archives {
                         let key = (arch.radio_station_id, arch.album_id, arch.song_id, arch.week_ending);
                         if let Some(&(target_arch_id, target_spins, target_sub_spins)) = target_map.get(&key) {
-                            let target_entry = RadioPlaylistArchive::find_by_id(target_arch_id).one(txn).await?
-                                .ok_or(DbErr::RecordNotFound("Target archive entry not found".to_string()))?;
-                            let mut active: crate::models::radio_playlist_archives::ActiveModel = target_entry.into();
-                            active.spins = Set(target_spins + arch.spins);
-                            active.subtract_spins = Set(target_sub_spins + arch.subtract_spins);
-                            active.update(txn).await?;
+                            RadioPlaylistArchive::update_many()
+                                .filter(RadioPlaylistArchiveColumn::Id.eq(target_arch_id))
+                                .col_expr(RadioPlaylistArchiveColumn::Spins, Expr::value(target_spins + arch.spins))
+                                .col_expr(RadioPlaylistArchiveColumn::SubtractSpins, Expr::value(target_sub_spins + arch.subtract_spins))
+                                .exec(txn).await?;
 
                             let source_active: crate::models::radio_playlist_archives::ActiveModel = arch.into();
                             source_active.delete(txn).await?;
@@ -498,20 +497,19 @@ pub async fn merge_bands(
                     );
                 }
 
-                for from_id in &from_ids {
-                    let playlists = StaffPlaylist::find()
-                        .filter(StaffPlaylistColumn::BandId.eq(*from_id))
+                {
+                    let all_playlists = StaffPlaylist::find()
+                        .filter(StaffPlaylistColumn::BandId.is_in(from_ids.clone()))
                         .all(txn)
                         .await?;
 
-                    for pl in playlists {
+                    for pl in all_playlists {
                         let key = (pl.staff_member_id, pl.album_id, pl.song_id);
                         if let Some(&(target_pl_id, target_spins)) = target_map.get(&key) {
-                            let target_entry = StaffPlaylist::find_by_id(target_pl_id).one(txn).await?
-                                .ok_or(DbErr::RecordNotFound("Target staff playlist entry not found".to_string()))?;
-                            let mut active: crate::models::staff_playlists::ActiveModel = target_entry.into();
-                            active.spins = Set(Some(target_spins.unwrap_or(0) + pl.spins.unwrap_or(0)));
-                            active.update(txn).await?;
+                            StaffPlaylist::update_many()
+                                .filter(StaffPlaylistColumn::Id.eq(target_pl_id))
+                                .col_expr(StaffPlaylistColumn::Spins, Expr::value(Some(target_spins.unwrap_or(0) + pl.spins.unwrap_or(0))))
+                                .exec(txn).await?;
 
                             let source_active: crate::models::staff_playlists::ActiveModel = pl.into();
                             source_active.delete(txn).await?;
@@ -542,20 +540,19 @@ pub async fn merge_bands(
                     );
                 }
 
-                for from_id in &from_ids {
-                    let archives = StaffPlaylistArchive::find()
-                        .filter(StaffPlaylistArchiveColumn::BandId.eq(*from_id))
+                {
+                    let all_archives = StaffPlaylistArchive::find()
+                        .filter(StaffPlaylistArchiveColumn::BandId.is_in(from_ids.clone()))
                         .all(txn)
                         .await?;
 
-                    for arch in archives {
+                    for arch in all_archives {
                         let key = (arch.staff_member_id, arch.album_id, arch.song_id, arch.week_ending);
                         if let Some(&(target_arch_id, target_spins)) = target_map.get(&key) {
-                            let target_entry = StaffPlaylistArchive::find_by_id(target_arch_id).one(txn).await?
-                                .ok_or(DbErr::RecordNotFound("Target staff archive entry not found".to_string()))?;
-                            let mut active: crate::models::staff_playlist_archives::ActiveModel = target_entry.into();
-                            active.spins = Set(Some(target_spins.unwrap_or(0) + arch.spins.unwrap_or(0)));
-                            active.update(txn).await?;
+                            StaffPlaylistArchive::update_many()
+                                .filter(StaffPlaylistArchiveColumn::Id.eq(target_arch_id))
+                                .col_expr(StaffPlaylistArchiveColumn::Spins, Expr::value(Some(target_spins.unwrap_or(0) + arch.spins.unwrap_or(0))))
+                                .exec(txn).await?;
 
                             let source_active: crate::models::staff_playlist_archives::ActiveModel = arch.into();
                             source_active.delete(txn).await?;
@@ -571,13 +568,13 @@ pub async fn merge_bands(
             }
 
             // 15. Update raw data (move all)
-            for from_id in &from_ids {
-                let raw_datas = RadioRawData::find()
-                    .filter(RadioRawDataColumn::BandId.eq(*from_id))
+            {
+                let all_raw_datas = RadioRawData::find()
+                    .filter(RadioRawDataColumn::BandId.is_in(from_ids.clone()))
                     .all(txn)
                     .await?;
 
-                for rd in raw_datas {
+                for rd in all_raw_datas {
                     let mut active: crate::models::radio_raw_datas::ActiveModel = rd.into();
                     active.band_id = Set(Some(target_id));
                     active.update(txn).await?;
@@ -597,13 +594,13 @@ pub async fn merge_bands(
                     .map(|a| (a.radio_station_id, a.alias_key))
                     .collect();
 
-                for from_id in &from_ids {
-                    let aliases = SongAlias::find()
-                        .filter(SongAliasColumn::BandId.eq(*from_id))
+                {
+                    let all_aliases = SongAlias::find()
+                        .filter(SongAliasColumn::BandId.is_in(from_ids.clone()))
                         .all(txn)
                         .await?;
 
-                    for alias in aliases {
+                    for alias in all_aliases {
                         let key = (alias.radio_station_id, alias.alias_key.clone());
                         if existing_song_alias_keys.contains(&key) {
                             let active: crate::models::song_aliases::ActiveModel = alias.into();
@@ -632,13 +629,13 @@ pub async fn merge_bands(
                     .map(|a| (a.radio_station_id, a.alias_key))
                     .collect();
 
-                for from_id in &from_ids {
-                    let aliases = AlbumAlias::find()
-                        .filter(AlbumAliasColumn::BandId.eq(*from_id))
+                {
+                    let all_aliases = AlbumAlias::find()
+                        .filter(AlbumAliasColumn::BandId.is_in(from_ids.clone()))
                         .all(txn)
                         .await?;
 
-                    for alias in aliases {
+                    for alias in all_aliases {
                         let key = (alias.radio_station_id, alias.alias_key.clone());
                         if existing_album_alias_keys.contains(&key) {
                             let active: crate::models::album_aliases::ActiveModel = alias.into();
@@ -657,14 +654,14 @@ pub async fn merge_bands(
 
             // 18. Band duplicate candidates — reassign, remove self-refs, deduplicate pairs
             {
-                for from_id in &from_ids {
+                {
                     // Reassign band_id_1 references
-                    let candidates_1 = BandDuplicateCandidate::find()
-                        .filter(BandDuplicateCandidateColumn::BandId1.eq(*from_id))
+                    let all_candidates_1 = BandDuplicateCandidate::find()
+                        .filter(BandDuplicateCandidateColumn::BandId1.is_in(from_ids.clone()))
                         .all(txn)
                         .await?;
 
-                    for cand in candidates_1 {
+                    for cand in all_candidates_1 {
                         let mut active: crate::models::band_duplicate_candidates::ActiveModel = cand.into();
                         active.band_id_1 = Set(target_id);
                         active.update(txn).await?;
@@ -672,12 +669,12 @@ pub async fn merge_bands(
                     }
 
                     // Reassign band_id_2 references
-                    let candidates_2 = BandDuplicateCandidate::find()
-                        .filter(BandDuplicateCandidateColumn::BandId2.eq(*from_id))
+                    let all_candidates_2 = BandDuplicateCandidate::find()
+                        .filter(BandDuplicateCandidateColumn::BandId2.is_in(from_ids.clone()))
                         .all(txn)
                         .await?;
 
-                    for cand in candidates_2 {
+                    for cand in all_candidates_2 {
                         let mut active: crate::models::band_duplicate_candidates::ActiveModel = cand.into();
                         active.band_id_2 = Set(target_id);
                         active.update(txn).await?;

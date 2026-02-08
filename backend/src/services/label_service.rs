@@ -169,7 +169,8 @@ impl LabelService {
         Self::create_label_alias(db, label.id, &data.name).await?;
 
         let responses = Self::to_label_responses(db, vec![label]).await?;
-        Ok(responses.into_iter().next().unwrap())
+        responses.into_iter().next()
+            .ok_or(DbErr::RecordNotFound("Failed to build label response".into()))
     }
 
     pub async fn update_label(
@@ -197,7 +198,8 @@ impl LabelService {
             }
 
         let responses = Self::to_label_responses(db, vec![updated]).await?;
-        Ok(responses.into_iter().next().unwrap())
+        responses.into_iter().next()
+            .ok_or(DbErr::RecordNotFound("Failed to build label response".into()))
     }
 
     async fn create_label_alias(
@@ -451,13 +453,13 @@ impl LabelService {
                 }
 
                 // 2. Reassign albums.label_id to target
-                for from_id in &from_ids {
-                    let albums = crate::models::albums::Entity::find()
-                        .filter(crate::models::albums::Column::LabelId.eq(*from_id))
+                {
+                    let source_albums = crate::models::albums::Entity::find()
+                        .filter(crate::models::albums::Column::LabelId.is_in(from_ids.clone()))
                         .all(txn)
                         .await?;
 
-                    for album in albums {
+                    for album in source_albums {
                         let mut active: crate::models::albums::ActiveModel = album.into();
                         active.label_id = Set(Some(target_id));
                         active.update(txn).await?;
@@ -475,25 +477,23 @@ impl LabelService {
                     .map(|a| a.alias_key)
                     .collect();
 
-                for from_id in &from_ids {
-                    let aliases = LabelAlias::find()
-                        .filter(LabelAliasColumn::LabelId.eq(*from_id))
-                        .all(txn)
-                        .await?;
+                let source_aliases = LabelAlias::find()
+                    .filter(LabelAliasColumn::LabelId.is_in(from_ids.clone()))
+                    .all(txn)
+                    .await?;
 
-                    for alias in aliases {
-                        if existing_aliases.contains(&alias.alias_key) {
-                            let active: crate::models::label_aliases::ActiveModel = alias.into();
-                            active.delete(txn).await?;
-                            stats.aliases_deduped += 1;
-                        } else {
-                            let alias_key = alias.alias_key.clone();
-                            let mut active: crate::models::label_aliases::ActiveModel = alias.into();
-                            active.label_id = Set(target_id);
-                            active.update(txn).await?;
-                            existing_aliases.insert(alias_key);
-                            stats.aliases_moved += 1;
-                        }
+                for alias in source_aliases {
+                    if existing_aliases.contains(&alias.alias_key) {
+                        let active: crate::models::label_aliases::ActiveModel = alias.into();
+                        active.delete(txn).await?;
+                        stats.aliases_deduped += 1;
+                    } else {
+                        let alias_key = alias.alias_key.clone();
+                        let mut active: crate::models::label_aliases::ActiveModel = alias.into();
+                        active.label_id = Set(target_id);
+                        active.update(txn).await?;
+                        existing_aliases.insert(alias_key);
+                        stats.aliases_moved += 1;
                     }
                 }
 
@@ -501,21 +501,19 @@ impl LabelService {
                 // These are scan results that can be regenerated, so deleting is safe
                 // and avoids unique constraint violations during reassignment
                 match async {
-                    for from_id in &from_ids {
-                        let candidates = LabelDuplicateCandidate::find()
-                            .filter(
-                                Condition::any()
-                                    .add(LabelDuplicateCandidateColumn::LabelId1.eq(*from_id))
-                                    .add(LabelDuplicateCandidateColumn::LabelId2.eq(*from_id))
-                            )
-                            .all(txn)
-                            .await?;
+                    let candidates = LabelDuplicateCandidate::find()
+                        .filter(
+                            Condition::any()
+                                .add(LabelDuplicateCandidateColumn::LabelId1.is_in(from_ids.clone()))
+                                .add(LabelDuplicateCandidateColumn::LabelId2.is_in(from_ids.clone()))
+                        )
+                        .all(txn)
+                        .await?;
 
-                        for cand in candidates {
-                            let active: crate::models::label_duplicate_candidates::ActiveModel = cand.into();
-                            active.delete(txn).await?;
-                            stats.duplicate_candidates_cleaned += 1;
-                        }
+                    for cand in candidates {
+                        let active: crate::models::label_duplicate_candidates::ActiveModel = cand.into();
+                        active.delete(txn).await?;
+                        stats.duplicate_candidates_cleaned += 1;
                     }
                     Ok::<(), DbErr>(())
                 }.await {

@@ -2,7 +2,8 @@
 
 import type {SelectProps} from 'antd';
 import {Select} from 'antd';
-import {useState} from 'react';
+import {useEffect, useState} from 'react';
+import {useDebouncedValue} from '@/hooks/useDebouncedValue';
 
 export interface BaseTypeaheadProps<T> extends Omit<SelectProps, 'onChange'> {
     value?: number;
@@ -30,26 +31,32 @@ export function BaseTypeahead<T>({
                                  }: BaseTypeaheadProps<T>) {
     const [loading, setLoading] = useState(false);
     const [options, setOptions] = useState<{ label: string; value: number }[]>([]);
+    const [searchInput, setSearchInput] = useState('');
+    const debouncedSearch = useDebouncedValue(searchInput, 300);
 
-    const handleSearch = async (search: string) => {
-        if (!search) {
+    useEffect(() => {
+        if (!debouncedSearch) {
             setOptions([]);
             return;
         }
 
-        setLoading(true);
-        try {
-            const items = await searchFn(search, searchParams);
-            setOptions(items.map(item => ({
-                label: getOptionLabel(item),
-                value: getOptionValue(item),
-            })));
-        } catch (error) {
-            console.error('Error fetching options:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
+        const fetchOptions = async () => {
+            setLoading(true);
+            try {
+                const items = await searchFn(debouncedSearch, searchParams);
+                setOptions(items.map(item => ({
+                    label: getOptionLabel(item),
+                    value: getOptionValue(item),
+                })));
+            } catch (error) {
+                console.error('Error fetching options:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchOptions();
+    }, [debouncedSearch, searchFn, searchParams, getOptionLabel, getOptionValue]);
 
     return (
         <Select
@@ -58,7 +65,7 @@ export function BaseTypeahead<T>({
             value={value}
             placeholder={placeholder}
             loading={loading}
-            onSearch={handleSearch}
+            onSearch={setSearchInput}
             onChange={(value, option) => {
                 if (option && !Array.isArray(option)) {
                     onChange?.(value, {id: value, name: option.label} as unknown as T);

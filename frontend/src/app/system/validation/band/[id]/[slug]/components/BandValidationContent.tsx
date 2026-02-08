@@ -34,6 +34,7 @@ import {
     FileSearchOutlined,
     StopOutlined,
 } from '@ant-design/icons';
+import DOMPurify from 'dompurify';
 import Link from 'next/link';
 
 import LoadingSpinner from '@/components/common/feedback/LoadingSpinner';
@@ -431,7 +432,7 @@ export default function BandValidationContent({ id, slug }: BandValidationConten
                                 <Divider>Biography</Divider>
                                 <div
                                     className="prose max-w-none"
-                                    dangerouslySetInnerHTML={{ __html: band.bio }}
+                                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(band.bio) }}
                                 />
                             </>
                         )}

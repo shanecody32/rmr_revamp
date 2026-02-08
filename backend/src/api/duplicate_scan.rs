@@ -5,7 +5,6 @@ use axum::{
     routing::{get, post, put},
     Json, Router,
 };
-use sea_orm::DbErr;
 use crate::views::ApiError;
 use crate::job_state::AppState;
 use crate::models::band_duplicate_candidates::CandidateStatus;
@@ -114,9 +113,6 @@ pub(crate) async fn start_scan(
                 tokens.remove(&et_string);
             });
             (StatusCode::ACCEPTED, Json(scan_state)).into_response()
-        }
-        Err(DbErr::Custom(msg)) if msg.contains("already running") => {
-            (StatusCode::BAD_REQUEST, msg).into_response()
         }
         Err(e) => ApiError::from(e).into_response(),
     }

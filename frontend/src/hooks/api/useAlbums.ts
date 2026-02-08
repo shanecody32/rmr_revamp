@@ -33,7 +33,7 @@ async function updateAlbum(id: number, data: Partial<AlbumResponse>): Promise<Al
 }
 
 export function useAlbums(params: ApiParams) {
-    const key = ['albums', params];
+    const key = ['albums', JSON.stringify(params)];
     
     const { data, error, isLoading, mutate } = useSWR(
         key,

@@ -7,6 +7,7 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {handleApiError} from '@/lib/errors';
 import type {ApiParams} from '@/types/api/common';
 import type {ApiError} from '@/types/error';
+import {useDebouncedValue} from '@/hooks/useDebouncedValue';
 
 interface UseTableDataParams<T> {
     fetchData: (params: ApiParams & Record<string, any>) => Promise<{
@@ -32,6 +33,7 @@ export function useTableData<T>({
     const [data, setData] = useState<T[]>([]);
     const [total, setTotal] = useState(0);
     const [searchTerm, setSearchTerm] = useState('');
+    const debouncedSearchTerm = useDebouncedValue(searchTerm, 300);
     const [filterType, setFilterType] = useState<ApiParams['name_filter_type']>('startswith');
     const [error, setError] = useState<ApiError | null>(null);
     const [sortParams, setSortParams] = useState<TableSortParams>({});
@@ -74,7 +76,7 @@ export function useTableData<T>({
                 page_size: size || pageSize,
                 sort_field: sort?.field || sortParams.field,
                 sort_ascending: sort?.order === 'ascend',
-                name: searchTerm,
+                name: debouncedSearchTerm,
                 name_filter_type: filterType,
                 filters: Object.keys(activeFilters).length > 0 ? activeFilters : undefined,
                 ...defaultParamsRef.current,
@@ -99,7 +101,7 @@ export function useTableData<T>({
                 setLoading(false);
             }
         }
-    }, [currentPage, pageSize, sortParams, searchTerm, filterType, filters]);
+    }, [currentPage, pageSize, sortParams, debouncedSearchTerm, filterType, filters]);
 
     useEffect(() => {
         fetchTableData();

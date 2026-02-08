@@ -129,14 +129,7 @@ pub async fn transfer_song_to_album(
         ip_address,
     ).await {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
-        Err(e) => {
-            let msg = e.to_string();
-            if msg.contains("not found") {
-                (StatusCode::NOT_FOUND, msg).into_response()
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
-            }
-        }
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -198,14 +191,7 @@ pub async fn transfer_song_to_band(
         ip_address,
     ).await {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
-        Err(e) => {
-            let msg = e.to_string();
-            if msg.contains("not found") {
-                (StatusCode::NOT_FOUND, msg).into_response()
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
-            }
-        }
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -238,14 +224,7 @@ pub async fn remove_song_from_album(
         ip_address,
     ).await {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
-        Err(e) => {
-            let msg = e.to_string();
-            if msg.contains("not on this album") {
-                (StatusCode::NOT_FOUND, msg).into_response()
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
-            }
-        }
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -311,13 +290,6 @@ pub async fn transfer_album_to_band(
         ip_address,
     ).await {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
-        Err(e) => {
-            let msg = e.to_string();
-            if msg.contains("not found") {
-                (StatusCode::NOT_FOUND, msg).into_response()
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
-            }
-        }
+        Err(e) => ApiError::from(e).into_response(),
     }
 }

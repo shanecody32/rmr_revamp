@@ -173,8 +173,9 @@ async fn test_genre_crud_round_trip() {
 
     // Read genres — should return at least some data
     use backend::services::genre_service::GenreService;
-    let genres = GenreService::get_genres(&db).await.unwrap();
-    assert!(!genres.is_empty(), "Database should have at least one genre");
+    let paginated = GenreService::get_genres(&db, None, None, 1, 10).await.unwrap();
+    assert!(!paginated.results.is_empty(), "Database should have at least one genre");
+    let genres = paginated.results;
 
     // Get sub_genres for the first genre
     let genre_id = genres[0].id;
@@ -189,13 +190,13 @@ async fn test_location_crud_round_trip() {
     let db = common::setup_test_db().await.unwrap();
 
     use backend::services::location_service::LocationService;
-    let countries = LocationService::get_countries(&db).await.unwrap();
-    assert!(!countries.is_empty(), "Database should have at least one country");
+    let paginated = LocationService::get_countries(&db, None, None, 1, 10).await.unwrap();
+    assert!(!paginated.results.is_empty(), "Database should have at least one country");
 
     // Verify we can look up by id
-    let country = LocationService::get_country_by_id(&db, countries[0].id).await.unwrap();
+    let country = LocationService::get_country_by_id(&db, paginated.results[0].id).await.unwrap();
     assert!(country.is_some());
-    assert_eq!(country.unwrap().id, countries[0].id);
+    assert_eq!(country.unwrap().id, paginated.results[0].id);
 }
 
 // ─── Similarity Search Integration ──────────────────────────────────
@@ -294,10 +295,10 @@ async fn test_user_crud_round_trip() {
     let db = common::setup_test_db().await.unwrap();
 
     use backend::services::user_service::UserService;
-    let users = UserService::get_all_users(&db).await.unwrap();
-    assert!(!users.is_empty(), "Database should have at least one user");
+    let result = UserService::get_users(&db, None, 1, 10).await.unwrap();
+    assert!(!result.results.is_empty(), "Database should have at least one user");
 
-    let user = UserService::get_user_by_id(&db, users[0].id).await.unwrap();
+    let user = UserService::get_user_by_id(&db, result.results[0].id).await.unwrap();
     assert!(user.is_some());
 }
 

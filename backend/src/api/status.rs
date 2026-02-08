@@ -64,14 +64,7 @@ pub async fn update_band_data_status(
 
     match StatusService::update_band_data_status(&state.db, band_id, update, user_id, ip_address).await {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
-        Err(e) => {
-            let msg = e.to_string();
-            if msg.contains("not found") {
-                (StatusCode::NOT_FOUND, msg).into_response()
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
-            }
-        }
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -99,16 +92,7 @@ pub async fn update_band_chart_status(
 
     match StatusService::update_band_chart_status(&state.db, band_id, update, user_id, ip_address).await {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
-        Err(e) => {
-            let msg = e.to_string();
-            if msg.contains("not found") {
-                (StatusCode::NOT_FOUND, msg).into_response()
-            } else if msg.contains("Cannot approve") {
-                (StatusCode::BAD_REQUEST, msg).into_response()
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
-            }
-        }
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -158,14 +142,7 @@ pub async fn update_album_data_status(
 
     match StatusService::update_album_data_status(&state.db, album_id, update, user_id, ip_address).await {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
-        Err(e) => {
-            let msg = e.to_string();
-            if msg.contains("not found") {
-                (StatusCode::NOT_FOUND, msg).into_response()
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
-            }
-        }
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -193,16 +170,7 @@ pub async fn update_album_chart_status(
 
     match StatusService::update_album_chart_status(&state.db, album_id, update, user_id, ip_address).await {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
-        Err(e) => {
-            let msg = e.to_string();
-            if msg.contains("not found") {
-                (StatusCode::NOT_FOUND, msg).into_response()
-            } else if msg.contains("Cannot approve") {
-                (StatusCode::BAD_REQUEST, msg).into_response()
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
-            }
-        }
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -252,14 +220,7 @@ pub async fn update_song_data_status(
 
     match StatusService::update_song_data_status(&state.db, song_id, update, user_id, ip_address).await {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
-        Err(e) => {
-            let msg = e.to_string();
-            if msg.contains("not found") {
-                (StatusCode::NOT_FOUND, msg).into_response()
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
-            }
-        }
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -287,16 +248,7 @@ pub async fn update_song_chart_status(
 
     match StatusService::update_song_chart_status(&state.db, song_id, update, user_id, ip_address).await {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
-        Err(e) => {
-            let msg = e.to_string();
-            if msg.contains("not found") {
-                (StatusCode::NOT_FOUND, msg).into_response()
-            } else if msg.contains("Cannot approve") {
-                (StatusCode::BAD_REQUEST, msg).into_response()
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
-            }
-        }
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -346,14 +298,7 @@ pub async fn update_radio_station_data_status(
 
     match StatusService::update_radio_station_data_status(&state.db, station_id, update, user_id, ip_address).await {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
-        Err(e) => {
-            let msg = e.to_string();
-            if msg.contains("not found") {
-                (StatusCode::NOT_FOUND, msg).into_response()
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
-            }
-        }
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -381,16 +326,7 @@ pub async fn update_radio_station_chart_status(
 
     match StatusService::update_radio_station_chart_status(&state.db, station_id, update, user_id, ip_address).await {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
-        Err(e) => {
-            let msg = e.to_string();
-            if msg.contains("not found") {
-                (StatusCode::NOT_FOUND, msg).into_response()
-            } else if msg.contains("Cannot approve") {
-                (StatusCode::BAD_REQUEST, msg).into_response()
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
-            }
-        }
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -440,14 +376,7 @@ pub async fn update_staff_data_status(
 
     match StatusService::update_staff_data_status(&state.db, staff_id, update, user_id, ip_address).await {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
-        Err(e) => {
-            let msg = e.to_string();
-            if msg.contains("not found") {
-                (StatusCode::NOT_FOUND, msg).into_response()
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
-            }
-        }
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 
@@ -475,16 +404,7 @@ pub async fn update_staff_chart_status(
 
     match StatusService::update_staff_chart_status(&state.db, staff_id, update, user_id, ip_address).await {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
-        Err(e) => {
-            let msg = e.to_string();
-            if msg.contains("not found") {
-                (StatusCode::NOT_FOUND, msg).into_response()
-            } else if msg.contains("Cannot approve") {
-                (StatusCode::BAD_REQUEST, msg).into_response()
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
-            }
-        }
+        Err(e) => ApiError::from(e).into_response(),
     }
 }
 

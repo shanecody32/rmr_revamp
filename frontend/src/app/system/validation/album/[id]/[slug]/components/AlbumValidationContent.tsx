@@ -33,6 +33,7 @@ import {
     StopOutlined,
     UserOutlined,
 } from '@ant-design/icons';
+import DOMPurify from 'dompurify';
 import Link from 'next/link';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -467,7 +468,7 @@ export default function AlbumValidationContent({ id, slug }: AlbumValidationCont
                                 <Divider>About</Divider>
                                 <div
                                     className="prose max-w-none"
-                                    dangerouslySetInnerHTML={{ __html: album.about }}
+                                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(album.about) }}
                                 />
                             </>
                         )}

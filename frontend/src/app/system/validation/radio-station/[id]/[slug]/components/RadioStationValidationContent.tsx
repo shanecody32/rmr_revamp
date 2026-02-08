@@ -29,6 +29,7 @@ import {
     WifiOutlined,
     GlobalOutlined,
 } from '@ant-design/icons';
+import DOMPurify from 'dompurify';
 import Link from 'next/link';
 
 import LoadingSpinner from '@/components/common/feedback/LoadingSpinner';
@@ -371,7 +372,7 @@ export default function RadioStationValidationContent({ id, slug }: RadioStation
                                 <Divider>Additional Info</Divider>
                                 <div
                                     className="prose max-w-none"
-                                    dangerouslySetInnerHTML={{ __html: station.info }}
+                                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(station.info) }}
                                 />
                             </>
                         )}

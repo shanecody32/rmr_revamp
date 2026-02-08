@@ -315,14 +315,16 @@ pub async fn get_or_create_unknown_album(
         .await?;
 
     // Look through the band's albums for one named "Unknown"
-    for album_band in existing {
-        if let Some(album_id) = album_band.album_id {
-            let album = Album::find_by_id(album_id).one(db).await?;
-            if let Some(album) = album
-                && let Some(ref name) = album.name
-                    && name.eq_ignore_ascii_case("unknown") {
-                        return Ok(album);
-                    }
+    let album_ids: Vec<u32> = existing.iter().filter_map(|ab| ab.album_id).collect();
+    if !album_ids.is_empty() {
+        let albums = Album::find()
+            .filter(crate::models::albums::Column::Id.is_in(album_ids))
+            .all(db)
+            .await?;
+        for album in albums {
+            if album.name.as_deref().map(|n| n.eq_ignore_ascii_case("unknown")).unwrap_or(false) {
+                return Ok(album);
+            }
         }
     }
 

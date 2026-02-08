@@ -2,6 +2,7 @@
 
 import {Select, Spin} from 'antd';
 import {useEffect, useState} from 'react';
+import {useDebouncedValue} from '@/hooks/useDebouncedValue';
 
 export interface EntityTypeaheadProps<T> {
     // Basic props
@@ -47,6 +48,8 @@ export function EntityTypeahead<T extends { id: number; name: string }>({
     const [loading, setLoading] = useState(false);
     const [options, setOptions] = useState<{ label: string; value: number }[]>([]);
     const [currentEntity, setCurrentEntity] = useState<T | null>(null);
+    const [searchInput, setSearchInput] = useState('');
+    const debouncedSearch = useDebouncedValue(searchInput, 300);
 
     // Check if dependencies are fulfilled
     const dependenciesUnfulfilled = dependenciesRequired &&
@@ -110,8 +113,8 @@ export function EntityTypeahead<T extends { id: number; name: string }>({
         }
     }, [value, currentEntity, fetchById, getOptionLabel, getOptionValue]);
 
-    const handleSearch = async (search: string) => {
-        if (!search || search.length < 2) {
+    useEffect(() => {
+        if (!debouncedSearch || debouncedSearch.length < 2) {
             return;
         }
 
@@ -120,19 +123,23 @@ export function EntityTypeahead<T extends { id: number; name: string }>({
             return;
         }
 
-        setLoading(true);
-        try {
-            const entitiesData = await fetchOptions(search, dependencies);
-            setOptions(entitiesData.map(entity => ({
-                label: getOptionLabel(entity),
-                value: getOptionValue(entity)
-            })));
-        } catch (error) {
-            console.error('Error fetching options:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
+        const doSearch = async () => {
+            setLoading(true);
+            try {
+                const entitiesData = await fetchOptions(debouncedSearch, dependencies);
+                setOptions(entitiesData.map(entity => ({
+                    label: getOptionLabel(entity),
+                    value: getOptionValue(entity)
+                })));
+            } catch (error) {
+                console.error('Error fetching options:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        doSearch();
+    }, [debouncedSearch, dependenciesUnfulfilled, fetchOptions, dependencies, getOptionLabel, getOptionValue]);
 
     // Determine if component should be disabled
     const isDisabled = disabled || dependenciesUnfulfilled;
@@ -143,7 +150,7 @@ export function EntityTypeahead<T extends { id: number; name: string }>({
             value={value}
             placeholder={placeholder}
             loading={loading}
-            onSearch={handleSearch}
+            onSearch={setSearchInput}
             onChange={(value, option) => {
                 const selectedEntity = value ? {
                     ...currentEntity,

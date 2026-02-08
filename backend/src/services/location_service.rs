@@ -1,9 +1,9 @@
-use crate::models::countries::{Entity as Country, Model as CountryModel};
-use crate::models::states::{Entity as State, Model as StateModel};
-use crate::models::cities::{Entity as City, Model as CityModel};
+use crate::models::countries::{Entity as Country, Model as CountryModel, Column as CountryColumn};
+use crate::models::states::{Entity as State, Model as StateModel, Column as StateColumn};
+use crate::models::cities::{Entity as City, Model as CityModel, Column as CityColumn};
 use crate::models::postal_codes::{Entity as PostalCode, Model as PostalCodeModel};
 use sea_orm::*;
-use crate::services::types::{SimilarityParams, SimilarResult};
+use crate::services::types::{PaginatedResponse, PaginationInfo, SimilarityParams, SimilarResult};
 use crate::utils::similarity::find_similar_pipeline;
 use crate::models::city_aliases::{Entity as CityAlias, Column as CityAliasColumn};
 use crate::models::state_aliases::{Entity as StateAlias, Column as StateAliasColumn};
@@ -12,8 +12,40 @@ use crate::models::postal_code_aliases::{Entity as PostalCodeAlias, Column as Po
 pub struct LocationService;
 
 impl LocationService {
-    pub async fn get_countries(db: &DatabaseConnection) -> Result<Vec<CountryModel>, DbErr> {
-        Country::find().all(db).await
+    pub async fn get_countries(
+        db: &DatabaseConnection,
+        name: Option<String>,
+        name_filter_type: Option<String>,
+        page: u64,
+        page_size: u64,
+    ) -> Result<PaginatedResponse<CountryModel>, DbErr> {
+        let mut query = Country::find();
+
+        if let Some(name) = name
+            && !name.is_empty()
+        {
+            match name_filter_type.as_deref() {
+                Some("starts_with") => query = query.filter(CountryColumn::Name.starts_with(&name)),
+                Some("ends_with") => query = query.filter(CountryColumn::Name.ends_with(&name)),
+                Some("exact_match") => query = query.filter(CountryColumn::Name.eq(&name)),
+                _ => query = query.filter(CountryColumn::Name.contains(&name)),
+            }
+        }
+
+        let paginator = query.paginate(db, page_size);
+        let total_items = paginator.num_items().await?;
+        let total_pages = paginator.num_pages().await?;
+        let results = paginator.fetch_page(page - 1).await?;
+
+        Ok(PaginatedResponse {
+            results,
+            pagination: PaginationInfo {
+                page,
+                page_size,
+                total_pages,
+                total_items,
+            },
+        })
     }
 
     pub async fn get_similar_countries(
@@ -46,12 +78,45 @@ impl LocationService {
         Country::find_by_id(id).one(db).await
     }
 
-    pub async fn get_states(db: &DatabaseConnection, country_id: Option<u32>) -> Result<Vec<StateModel>, DbErr> {
+    pub async fn get_states(
+        db: &DatabaseConnection,
+        country_id: Option<u32>,
+        name: Option<String>,
+        name_filter_type: Option<String>,
+        page: u64,
+        page_size: u64,
+    ) -> Result<PaginatedResponse<StateModel>, DbErr> {
         let mut query = State::find();
+
         if let Some(cid) = country_id {
-            query = query.filter(crate::models::states::Column::CountryId.eq(cid));
+            query = query.filter(StateColumn::CountryId.eq(cid));
         }
-        query.all(db).await
+
+        if let Some(name) = name
+            && !name.is_empty()
+        {
+            match name_filter_type.as_deref() {
+                Some("starts_with") => query = query.filter(StateColumn::Name.starts_with(&name)),
+                Some("ends_with") => query = query.filter(StateColumn::Name.ends_with(&name)),
+                Some("exact_match") => query = query.filter(StateColumn::Name.eq(&name)),
+                _ => query = query.filter(StateColumn::Name.contains(&name)),
+            }
+        }
+
+        let paginator = query.paginate(db, page_size);
+        let total_items = paginator.num_items().await?;
+        let total_pages = paginator.num_pages().await?;
+        let results = paginator.fetch_page(page - 1).await?;
+
+        Ok(PaginatedResponse {
+            results,
+            pagination: PaginationInfo {
+                page,
+                page_size,
+                total_pages,
+                total_items,
+            },
+        })
     }
 
     pub async fn get_similar_states(
@@ -118,15 +183,45 @@ impl LocationService {
         db: &DatabaseConnection,
         country_id: Option<u32>,
         state_id: Option<u32>,
-    ) -> Result<Vec<CityModel>, DbErr> {
+        name: Option<String>,
+        name_filter_type: Option<String>,
+        page: u64,
+        page_size: u64,
+    ) -> Result<PaginatedResponse<CityModel>, DbErr> {
         let mut query = City::find();
+
         if let Some(cid) = country_id {
-            query = query.filter(crate::models::cities::Column::CountryId.eq(cid));
+            query = query.filter(CityColumn::CountryId.eq(cid));
         }
         if let Some(sid) = state_id {
-            query = query.filter(crate::models::cities::Column::StateId.eq(sid));
+            query = query.filter(CityColumn::StateId.eq(sid));
         }
-        query.all(db).await
+
+        if let Some(name) = name
+            && !name.is_empty()
+        {
+            match name_filter_type.as_deref() {
+                Some("starts_with") => query = query.filter(CityColumn::Name.starts_with(&name)),
+                Some("ends_with") => query = query.filter(CityColumn::Name.ends_with(&name)),
+                Some("exact_match") => query = query.filter(CityColumn::Name.eq(&name)),
+                _ => query = query.filter(CityColumn::Name.contains(&name)),
+            }
+        }
+
+        let paginator = query.paginate(db, page_size);
+        let total_items = paginator.num_items().await?;
+        let total_pages = paginator.num_pages().await?;
+        let results = paginator.fetch_page(page - 1).await?;
+
+        Ok(PaginatedResponse {
+            results,
+            pagination: PaginationInfo {
+                page,
+                page_size,
+                total_pages,
+                total_items,
+            },
+        })
     }
 
     pub async fn get_similar_cities(

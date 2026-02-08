@@ -6,8 +6,18 @@
 use backend::utils::similarity::keys::{soundex, metaphone, double_metaphone};
 use backend::utils::similarity::pipeline::{calculate_similarity_score, fuzzy_filter_models};
 use backend::utils::slug::{sanitize_name, slug_it, extract_search_terms};
+use backend::services::types::SimilarityParams;
+use sea_orm::{DatabaseBackend, MockDatabase};
 
 mod common;
+
+fn sim_params(search_term: &str) -> SimilarityParams {
+    SimilarityParams {
+        search_term: search_term.to_string(),
+        min_similarity: Some(40),
+        ..Default::default()
+    }
+}
 
 // ============================================================================
 // Soundex Tests
@@ -610,4 +620,232 @@ fn test_double_metaphone_def_leppard_misspelling() {
     let (p1, _) = double_metaphone("Def Leppard");
     let (p2, _) = double_metaphone("Def Lepard");
     assert_eq!(p1, p2, "Def Leppard vs Def Lepard double metaphone primary should match");
+}
+
+// ============================================================================
+// Service-Level Similarity Search Tests (MockDatabase)
+// ============================================================================
+
+// ─── Country Tests ──────────────────────────────────────────────
+
+mod country_service_tests {
+    use super::*;
+    use backend::services::location_service::LocationService;
+
+    #[tokio::test]
+    async fn get_similar_countries_no_results() {
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            // Q1: find_similar_pipeline → empty
+            .append_query_results(vec![Vec::<backend::models::countries::Model>::new()])
+            .into_connection();
+
+        let result = LocationService::get_similar_countries(&db, sim_params("Atlantis")).await;
+        assert!(result.is_ok(), "get_similar_countries failed: {:?}", result.err());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn get_similar_countries_with_match() {
+        let country = common::make_test_country(1, "United States");
+
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            // Q1: find_similar_pipeline → 1 country (name matches search for 100% score)
+            .append_query_results(vec![vec![country]])
+            .into_connection();
+
+        let result = LocationService::get_similar_countries(
+            &db,
+            sim_params("United States"),
+        ).await;
+        assert!(result.is_ok(), "get_similar_countries failed: {:?}", result.err());
+        let matches = result.unwrap();
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].model.name, Some("United States".to_string()));
+        assert_eq!(matches[0].similarity_score, 100);
+    }
+}
+
+// ─── State Tests ────────────────────────────────────────────────
+
+mod state_service_tests {
+    use super::*;
+    use backend::services::location_service::LocationService;
+
+    #[tokio::test]
+    async fn get_similar_states_no_results() {
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            // Q1: find_similar_pipeline on state_aliases → empty
+            .append_query_results(vec![Vec::<backend::models::state_aliases::Model>::new()])
+            .into_connection();
+
+        let result = LocationService::get_similar_states(&db, sim_params("Nowhere")).await;
+        assert!(result.is_ok(), "get_similar_states failed: {:?}", result.err());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn get_similar_states_with_match() {
+        let alias = common::make_test_state_alias(1, 10, "California");
+        let state = common::make_test_state(10, 1, "California");
+
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            // Q1: find_similar_pipeline on state_aliases → 1 alias
+            .append_query_results(vec![vec![alias]])
+            // Q2: load states by ID
+            .append_query_results(vec![vec![state]])
+            .into_connection();
+
+        let result = LocationService::get_similar_states(
+            &db,
+            sim_params("California"),
+        ).await;
+        assert!(result.is_ok(), "get_similar_states failed: {:?}", result.err());
+        let matches = result.unwrap();
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].model.name, Some("California".to_string()));
+        assert_eq!(matches[0].similarity_score, 100);
+    }
+}
+
+// ─── City Tests ─────────────────────────────────────────────────
+
+mod city_service_tests {
+    use super::*;
+    use backend::services::location_service::LocationService;
+
+    #[tokio::test]
+    async fn get_similar_cities_no_results() {
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            // Q1: find_similar_pipeline on city_aliases → empty
+            .append_query_results(vec![Vec::<backend::models::city_aliases::Model>::new()])
+            .into_connection();
+
+        let result = LocationService::get_similar_cities(&db, sim_params("Atlantis")).await;
+        assert!(result.is_ok(), "get_similar_cities failed: {:?}", result.err());
+        assert!(result.unwrap().is_empty());
+    }
+}
+
+// ─── Band Tests ─────────────────────────────────────────────────
+
+mod band_service_tests {
+    use super::*;
+    use backend::services::band::BandService;
+
+    #[tokio::test]
+    async fn get_similar_bands_no_results() {
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            // Q1: alias pipeline → empty
+            .append_query_results(vec![Vec::<backend::models::band_aliases::Model>::new()])
+            // Q2: direct band search → empty
+            .append_query_results(vec![Vec::<backend::models::bands::Model>::new()])
+            .into_connection();
+
+        let result = BandService::get_similar_bands(&db, sim_params("Nonexistent Band")).await;
+        assert!(result.is_ok(), "get_similar_bands failed: {:?}", result.err());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn get_similar_bands_with_match() {
+        let alias = common::make_test_band_alias(1, 10, "The Beatles");
+        let band = common::make_test_band(10, "The Beatles");
+
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            // Q1: alias pipeline → 1 alias
+            .append_query_results(vec![vec![alias]])
+            // Q2: direct band search → empty
+            .append_query_results(vec![Vec::<backend::models::bands::Model>::new()])
+            // Q3: load bands for alias results
+            .append_query_results(vec![vec![band]])
+            // load_band_relations for 1 band (7 queries, all empty):
+            // Q4: bands_sub_genres
+            .append_query_results(vec![Vec::<backend::models::bands_sub_genres::Model>::new()])
+            // Q5: sub_genres
+            .append_query_results(vec![Vec::<backend::models::sub_genres::Model>::new()])
+            // Q6: genres
+            .append_query_results(vec![Vec::<backend::models::genres::Model>::new()])
+            // Q7: countries
+            .append_query_results(vec![Vec::<backend::models::countries::Model>::new()])
+            // Q8: states
+            .append_query_results(vec![Vec::<backend::models::states::Model>::new()])
+            // Q9: cities
+            .append_query_results(vec![Vec::<backend::models::cities::Model>::new()])
+            // Q10: band_images
+            .append_query_results(vec![Vec::<backend::models::band_images::Model>::new()])
+            .into_connection();
+
+        let result = BandService::get_similar_bands(
+            &db,
+            sim_params("The Beatles"),
+        ).await;
+        assert!(result.is_ok(), "get_similar_bands failed: {:?}", result.err());
+        let matches = result.unwrap();
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].model.band.name, "The Beatles");
+        assert_eq!(matches[0].similarity_score, 100);
+    }
+
+    #[tokio::test]
+    async fn get_similar_bands_excludes_existing_id() {
+        let alias = common::make_test_band_alias(1, 10, "The Beatles");
+        let band = common::make_test_band(10, "The Beatles");
+
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            // Q1: alias pipeline (existing_id filter applied in query)
+            .append_query_results(vec![vec![alias]])
+            // Q2: direct band search → same band
+            .append_query_results(vec![vec![band.clone()]])
+            // Q3: load bands for alias results
+            .append_query_results(vec![vec![band]])
+            .into_connection();
+
+        let mut p = sim_params("The Beatles");
+        p.existing_id = Some(10);
+
+        let result = BandService::get_similar_bands(&db, p).await;
+        assert!(result.is_ok(), "get_similar_bands failed: {:?}", result.err());
+        // Band with id=10 should be excluded via existing_id filter
+        assert!(result.unwrap().is_empty());
+    }
+}
+
+// ─── Song Tests ─────────────────────────────────────────────────
+
+mod song_service_tests {
+    use super::*;
+    use backend::services::song_service::SongService;
+
+    #[tokio::test]
+    async fn get_similar_songs_no_results() {
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            // Q1: alias pipeline → empty
+            .append_query_results(vec![Vec::<backend::models::song_aliases::Model>::new()])
+            .into_connection();
+
+        let result = SongService::get_similar_songs(&db, sim_params("Unknown Song")).await;
+        assert!(result.is_ok(), "get_similar_songs failed: {:?}", result.err());
+        assert!(result.unwrap().is_empty());
+    }
+}
+
+// ─── Label Tests ────────────────────────────────────────────────
+
+mod label_service_tests {
+    use super::*;
+    use backend::services::label_service::LabelService;
+
+    #[tokio::test]
+    async fn get_similar_labels_no_results() {
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            // Q1: alias pipeline → empty
+            .append_query_results(vec![Vec::<backend::models::label_aliases::Model>::new()])
+            // Q2: direct label search → empty
+            .append_query_results(vec![Vec::<backend::models::labels::Model>::new()])
+            .into_connection();
+
+        let result = LabelService::get_similar_labels(&db, sim_params("Nonexistent Label")).await;
+        assert!(result.is_ok(), "get_similar_labels failed: {:?}", result.err());
+        assert!(result.unwrap().is_empty());
+    }
 }

@@ -33,7 +33,7 @@ async function updateSong(id: number, data: Partial<SongResponse>): Promise<Song
 }
 
 export function useSongs(params: ApiParams) {
-    const key = ['songs', params];
+    const key = ['songs', JSON.stringify(params)];
     
     const { data, error, isLoading, mutate } = useSWR(
         key,

@@ -98,6 +98,9 @@ pub fn add_safe_db_similarity_conditions(
 ) -> Condition {
     let col_name = columns.name.to_string();
 
+    // Cache double_metaphone result (called multiple times for same input)
+    let (dm_primary, dm_alt) = crate::utils::similarity::keys::double_metaphone(sanitized_name);
+
     // 1. Name contains (Standard LIKE)
     condition = condition
         .add(columns.name.contains(search_term))
@@ -121,9 +124,7 @@ pub fn add_safe_db_similarity_conditions(
 
     // 4. Phonetic / Metaphone
     if let Some(ph_col) = &columns.phonetic {
-        // Legacy/Generic phonetic column (using Double Metaphone Primary)
-        let (p, _) = crate::utils::similarity::keys::double_metaphone(sanitized_name);
-        condition = condition.add(ph_col.eq(p));
+        condition = condition.add(ph_col.eq(dm_primary.clone()));
     }
 
     if let Some(m_col) = &columns.metaphone {
@@ -131,13 +132,11 @@ pub fn add_safe_db_similarity_conditions(
     }
 
     if let Some(dm_col) = &columns.dmetaphone {
-        let (p, _) = crate::utils::similarity::keys::double_metaphone(sanitized_name);
-        condition = condition.add(dm_col.eq(p));
+        condition = condition.add(dm_col.eq(dm_primary.clone()));
     }
 
     if let Some(dma_col) = &columns.dmetaphone_alt {
-        let (_, a) = crate::utils::similarity::keys::double_metaphone(sanitized_name);
-        if let Some(alt) = a {
+        if let Some(alt) = dm_alt {
             condition = condition.add(dma_col.eq(alt));
         }
     }
@@ -229,8 +228,9 @@ where
         query = query.filter(id_column.ne(id));
     }
 
+    let db_limit = (params.limit.unwrap_or(20) as u64 * 10).min(1000);
     let candidates = query
-        .limit(1000)
+        .limit(db_limit)
         .all(db)
         .await?;
 

@@ -18,7 +18,7 @@ interface UseBandsParams extends ApiParams {
 }
 
 export function useBands(params: UseBandsParams) {
-    const key = ['bands', params];
+    const key = ['bands', JSON.stringify(params)];
     
     const { data, error, isLoading, mutate } = useSWR(
         key,

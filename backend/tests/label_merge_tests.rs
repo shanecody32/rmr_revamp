@@ -145,12 +145,13 @@ mod empty_merge {
         // Q1: pre-txn find
         builder = builder.append_query_results(vec![vec![target.clone()]]);
         // null merged_data → skip update
-        // With 2 sources:
-        // Albums: source(2) + source(3) = 2
-        // LabelAlias: target + source(2) + source(3) = 3
-        // DupCandidates: source(2) + source(3) = 2
-        // Total: 7
-        for _ in 0..7 {
+        // With batch is_in() queries (2 sources):
+        // Q2: Albums batch (is_in) = 1 query
+        // Q3: LabelAlias target = 1 query
+        // Q4: LabelAlias source batch (is_in) = 1 query
+        // Q5: DupCandidates batch (is_in) = 1 query
+        // Total: 4
+        for _ in 0..4 {
             builder = builder.append_query_results(vec![Vec::<LabelModel>::new()]);
         }
         // E1: delete source 2

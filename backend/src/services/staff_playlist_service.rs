@@ -22,6 +22,7 @@ use crate::models::album_duplicate_candidates::{
 use crate::services::types::{PaginatedResponse, PaginationInfo};
 use sea_orm::*;
 use sea_orm::prelude::{DateTime, Date};
+use sea_orm::sea_query::Expr;
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use std::collections::HashMap;
@@ -306,7 +307,8 @@ impl StaffPlaylistService {
             .await?
             .ok_or(DbErr::RecordNotFound("Inserted entry not found".to_string()))?;
         let results = Self::enrich_playlist_entries(db, &[entry]).await?;
-        Ok(results.into_iter().next().unwrap())
+        results.into_iter().next()
+            .ok_or(DbErr::RecordNotFound("Failed to enrich entry".into()))
     }
 
     pub async fn update_spins(
@@ -335,7 +337,8 @@ impl StaffPlaylistService {
             .await?
             .ok_or(DbErr::RecordNotFound("Updated entry not found".to_string()))?;
         let results = Self::enrich_playlist_entries(db, &[updated]).await?;
-        Ok(results.into_iter().next().unwrap())
+        results.into_iter().next()
+            .ok_or(DbErr::RecordNotFound("Failed to enrich entry".into()))
     }
 
     pub async fn bulk_update_spins(
@@ -344,19 +347,11 @@ impl StaffPlaylistService {
     ) -> Result<u32, DbErr> {
         let mut count = 0u32;
         for update in updates {
-            let exists = StaffPlaylist::find_by_id(update.id)
-                .into_model::<PlaylistRow>()
-                .one(db)
-                .await?;
-            if exists.is_some() {
-                let active = crate::models::staff_playlists::ActiveModel {
-                    id: Unchanged(update.id),
-                    spins: Set(update.spins),
-                    ..Default::default()
-                };
-                StaffPlaylist::update(active).exec(db).await?;
-                count += 1;
-            }
+            let result = StaffPlaylist::update_many()
+                .filter(StaffPlaylistColumn::Id.eq(update.id))
+                .col_expr(StaffPlaylistColumn::Spins, Expr::value(update.spins))
+                .exec(db).await?;
+            count += result.rows_affected as u32;
         }
         Ok(count)
     }
@@ -508,7 +503,8 @@ impl StaffPlaylistService {
             .await?
             .ok_or(DbErr::RecordNotFound("Updated entry not found".to_string()))?;
         let results = Self::enrich_playlist_entries(db, &[updated]).await?;
-        Ok(results.into_iter().next().unwrap())
+        results.into_iter().next()
+            .ok_or(DbErr::RecordNotFound("Failed to enrich entry".into()))
     }
 
     pub async fn import_from_archive(

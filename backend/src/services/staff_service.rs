@@ -30,6 +30,7 @@ use crate::utils::similarity::find_similar_pipeline;
 use crate::views::staff::{StaffDetailView, StaffListView, StaffListViewEnriched, StaffTransferLink};
 use chrono::Utc;
 use sea_orm::*;
+use sea_orm::sea_query::Expr;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use utoipa::{IntoParams, ToSchema};
@@ -619,13 +620,8 @@ impl StaffService {
         ip_address: Option<String>,
     ) -> Result<StaffMergeResult, DbErr> {
         // Validate target exists
-        let into_staff = StaffMember::find_by_id(req.into_id).one(db).await?;
-        if into_staff.is_none() {
-            return Err(DbErr::RecordNotFound(
-                "Target staff member not found".to_string(),
-            ));
-        }
-        let into_staff = into_staff.unwrap();
+        let into_staff = StaffMember::find_by_id(req.into_id).one(db).await?
+            .ok_or(DbErr::RecordNotFound("Target staff member not found".into()))?;
 
         // Validate all from_ids exist and belong to the same station
         let from_staff = StaffMember::find()
@@ -712,27 +708,25 @@ impl StaffService {
                         .filter_map(|img| img.path)
                         .collect();
 
-                    for from_id in &from_ids {
-                        let images = StaffImage::find()
-                            .filter(StaffImageColumn::StaffMemberId.eq(*from_id))
-                            .all(txn)
-                            .await?;
+                    let source_images = StaffImage::find()
+                        .filter(StaffImageColumn::StaffMemberId.is_in(from_ids.clone()))
+                        .all(txn)
+                        .await?;
 
-                        for img in images {
-                            if let Some(ref path) = img.path
-                                && existing_paths.contains(path) {
-                                    // Delete duplicate
-                                    let active: crate::models::staff_images::ActiveModel =
-                                        img.into();
-                                    active.delete(txn).await?;
-                                    stats.images_deduped += 1;
-                                    continue;
-                                }
-                            let mut active: crate::models::staff_images::ActiveModel = img.into();
-                            active.staff_member_id = Set(Some(target_id));
-                            active.update(txn).await?;
-                            stats.images_moved += 1;
-                        }
+                    for img in source_images {
+                        if let Some(ref path) = img.path
+                            && existing_paths.contains(path) {
+                                // Delete duplicate
+                                let active: crate::models::staff_images::ActiveModel =
+                                    img.into();
+                                active.delete(txn).await?;
+                                stats.images_deduped += 1;
+                                continue;
+                            }
+                        let mut active: crate::models::staff_images::ActiveModel = img.into();
+                        active.staff_member_id = Set(Some(target_id));
+                        active.update(txn).await?;
+                        stats.images_moved += 1;
                     }
 
                     // 3. Move links (dedupe by link URL)
@@ -744,26 +738,24 @@ impl StaffService {
                         .filter_map(|lnk| lnk.link)
                         .collect();
 
-                    for from_id in &from_ids {
-                        let links = StaffLink::find()
-                            .filter(StaffLinkColumn::StaffMemberId.eq(*from_id))
-                            .all(txn)
-                            .await?;
+                    let source_links = StaffLink::find()
+                        .filter(StaffLinkColumn::StaffMemberId.is_in(from_ids.clone()))
+                        .all(txn)
+                        .await?;
 
-                        for lnk in links {
-                            if let Some(ref url) = lnk.link
-                                && existing_links.contains(url) {
-                                    let active: crate::models::staff_links::ActiveModel =
-                                        lnk.into();
-                                    active.delete(txn).await?;
-                                    stats.links_deduped += 1;
-                                    continue;
-                                }
-                            let mut active: crate::models::staff_links::ActiveModel = lnk.into();
-                            active.staff_member_id = Set(Some(target_id));
-                            active.update(txn).await?;
-                            stats.links_moved += 1;
-                        }
+                    for lnk in source_links {
+                        if let Some(ref url) = lnk.link
+                            && existing_links.contains(url) {
+                                let active: crate::models::staff_links::ActiveModel =
+                                    lnk.into();
+                                active.delete(txn).await?;
+                                stats.links_deduped += 1;
+                                continue;
+                            }
+                        let mut active: crate::models::staff_links::ActiveModel = lnk.into();
+                        active.staff_member_id = Set(Some(target_id));
+                        active.update(txn).await?;
+                        stats.links_moved += 1;
                     }
 
                     // 4. Move phone numbers (dedupe by phone+ext)
@@ -775,37 +767,35 @@ impl StaffService {
                         .filter_map(|ph| ph.phone.map(|p| (p, ph.ext)))
                         .collect();
 
-                    for from_id in &from_ids {
-                        let phones = StaffPhone::find()
-                            .filter(StaffPhoneColumn::StaffMemberId.eq(*from_id))
-                            .all(txn)
-                            .await?;
+                    let source_phones = StaffPhone::find()
+                        .filter(StaffPhoneColumn::StaffMemberId.is_in(from_ids.clone()))
+                        .all(txn)
+                        .await?;
 
-                        for ph in phones {
-                            if let Some(ref phone) = ph.phone
-                                && existing_phones.contains(&(phone.clone(), ph.ext)) {
-                                    let active: crate::models::staff_phone_numbers::ActiveModel =
-                                        ph.into();
-                                    active.delete(txn).await?;
-                                    stats.phones_deduped += 1;
-                                    continue;
-                                }
-                            let mut active: crate::models::staff_phone_numbers::ActiveModel =
-                                ph.into();
-                            active.staff_member_id = Set(Some(target_id));
-                            active.update(txn).await?;
-                            stats.phones_moved += 1;
-                        }
+                    for ph in source_phones {
+                        if let Some(ref phone) = ph.phone
+                            && existing_phones.contains(&(phone.clone(), ph.ext)) {
+                                let active: crate::models::staff_phone_numbers::ActiveModel =
+                                    ph.into();
+                                active.delete(txn).await?;
+                                stats.phones_deduped += 1;
+                                continue;
+                            }
+                        let mut active: crate::models::staff_phone_numbers::ActiveModel =
+                            ph.into();
+                        active.staff_member_id = Set(Some(target_id));
+                        active.update(txn).await?;
+                        stats.phones_moved += 1;
                     }
 
                     // 5. Move addresses (keep all - no dedup)
-                    for from_id in &from_ids {
-                        let addresses = StaffAddress::find()
-                            .filter(StaffAddressColumn::StaffMemberId.eq(*from_id))
+                    {
+                        let source_addresses = StaffAddress::find()
+                            .filter(StaffAddressColumn::StaffMemberId.is_in(from_ids.clone()))
                             .all(txn)
                             .await?;
 
-                        for addr in addresses {
+                        for addr in source_addresses {
                             let mut active: crate::models::staff_addresses::ActiveModel =
                                 addr.into();
                             active.staff_member_id = Set(Some(target_id));
@@ -823,120 +813,105 @@ impl StaffService {
                         .map(|a| a.name.to_lowercase())
                         .collect();
 
-                    for from_id in &from_ids {
-                        let aliases = StaffMemberAlias::find()
-                            .filter(StaffMemberAliasColumn::StaffMemberId.eq(*from_id))
-                            .all(txn)
-                            .await?;
+                    let source_aliases = StaffMemberAlias::find()
+                        .filter(StaffMemberAliasColumn::StaffMemberId.is_in(from_ids.clone()))
+                        .all(txn)
+                        .await?;
 
-                        for alias in aliases {
-                            let alias_name_lower = alias.name.to_lowercase();
-                            if existing_aliases.contains(&alias_name_lower) {
-                                let active: crate::models::staff_member_aliases::ActiveModel =
-                                    alias.into();
-                                active.delete(txn).await?;
-                                stats.aliases_deduped += 1;
-                                continue;
-                            }
-                            let mut active: crate::models::staff_member_aliases::ActiveModel =
+                    for alias in source_aliases {
+                        let alias_name_lower = alias.name.to_lowercase();
+                        if existing_aliases.contains(&alias_name_lower) {
+                            let active: crate::models::staff_member_aliases::ActiveModel =
                                 alias.into();
-                            active.staff_member_id = Set(target_id);
-                            active.update(txn).await?;
-                            existing_aliases.insert(alias_name_lower);
-                            stats.aliases_moved += 1;
+                            active.delete(txn).await?;
+                            stats.aliases_deduped += 1;
+                            continue;
                         }
+                        let mut active: crate::models::staff_member_aliases::ActiveModel =
+                            alias.into();
+                        active.staff_member_id = Set(target_id);
+                        active.update(txn).await?;
+                        existing_aliases.insert(alias_name_lower);
+                        stats.aliases_moved += 1;
                     }
 
                     // 7. Move playlists with aggregation
                     // Match on: band_id + album_id + song_id (current week)
-                    let existing_playlists: HashMap<PlaylistKey, u32> =
+                    let existing_playlists: HashMap<PlaylistKey, (u32, Option<i32>)> =
                         StaffPlaylist::find()
                             .filter(StaffPlaylistColumn::StaffMemberId.eq(target_id))
                             .all(txn)
                             .await?
                             .into_iter()
-                            .map(|pl| ((pl.band_id, pl.album_id, pl.song_id), pl.id))
+                            .map(|pl| ((pl.band_id, pl.album_id, pl.song_id), (pl.id, pl.spins)))
                             .collect();
 
-                    for from_id in &from_ids {
-                        let playlists = StaffPlaylist::find()
-                            .filter(StaffPlaylistColumn::StaffMemberId.eq(*from_id))
-                            .all(txn)
-                            .await?;
+                    let source_playlists = StaffPlaylist::find()
+                        .filter(StaffPlaylistColumn::StaffMemberId.is_in(from_ids.clone()))
+                        .all(txn)
+                        .await?;
 
-                        for pl in playlists {
-                            let key = (pl.band_id, pl.album_id, pl.song_id);
-                            if let Some(&existing_id) = existing_playlists.get(&key) {
-                                // Aggregate spins
-                                if let Some(from_spins) = pl.spins {
-                                    let existing = StaffPlaylist::find_by_id(existing_id)
-                                        .one(txn)
-                                        .await?;
-                                    if let Some(existing) = existing {
-                                        let current = existing.spins.unwrap_or(0);
-                                        let mut active: crate::models::staff_playlists::ActiveModel =
-                                            existing.into();
-                                        active.spins = Set(Some(current + from_spins));
-                                        active.update(txn).await?;
-                                    }
-                                }
-                                // Delete source
-                                let active: crate::models::staff_playlists::ActiveModel = pl.into();
-                                active.delete(txn).await?;
-                                stats.playlists_aggregated += 1;
-                            } else {
-                                let mut active: crate::models::staff_playlists::ActiveModel =
-                                    pl.into();
-                                active.staff_member_id = Set(Some(target_id));
-                                active.update(txn).await?;
-                                stats.playlists_moved += 1;
+                    for pl in source_playlists {
+                        let key = (pl.band_id, pl.album_id, pl.song_id);
+                        if let Some(&(existing_id, existing_spins)) = existing_playlists.get(&key) {
+                            // Aggregate spins
+                            if let Some(from_spins) = pl.spins {
+                                let current = existing_spins.unwrap_or(0);
+                                StaffPlaylist::update_many()
+                                    .filter(StaffPlaylistColumn::Id.eq(existing_id))
+                                    .col_expr(StaffPlaylistColumn::Spins, Expr::value(Some(current + from_spins)))
+                                    .exec(txn).await?;
                             }
+                            // Delete source
+                            let active: crate::models::staff_playlists::ActiveModel = pl.into();
+                            active.delete(txn).await?;
+                            stats.playlists_aggregated += 1;
+                        } else {
+                            let mut active: crate::models::staff_playlists::ActiveModel =
+                                pl.into();
+                            active.staff_member_id = Set(Some(target_id));
+                            active.update(txn).await?;
+                            stats.playlists_moved += 1;
                         }
                     }
 
                     // 8. Move playlist archives with aggregation
                     // Match on: week_ending + band_id + album_id + song_id
-                    let existing_archives: HashMap<StaffArchiveKey, u32> = StaffPlaylistArchive::find()
+                    let existing_archives: HashMap<StaffArchiveKey, (u32, Option<i32>)> = StaffPlaylistArchive::find()
                         .filter(StaffPlaylistArchiveColumn::StaffMemberId.eq(target_id))
                         .all(txn)
                         .await?
                         .into_iter()
-                        .map(|a| ((a.week_ending, a.band_id, a.album_id, a.song_id), a.id))
+                        .map(|a| ((a.week_ending, a.band_id, a.album_id, a.song_id), (a.id, a.spins)))
                         .collect();
 
-                    for from_id in &from_ids {
-                        let archives = StaffPlaylistArchive::find()
-                            .filter(StaffPlaylistArchiveColumn::StaffMemberId.eq(*from_id))
-                            .all(txn)
-                            .await?;
+                    let source_archives = StaffPlaylistArchive::find()
+                        .filter(StaffPlaylistArchiveColumn::StaffMemberId.is_in(from_ids.clone()))
+                        .all(txn)
+                        .await?;
 
-                        for arch in archives {
-                            let key = (arch.week_ending, arch.band_id, arch.album_id, arch.song_id);
-                            if let Some(&existing_id) = existing_archives.get(&key) {
-                                // Aggregate spins
-                                if let Some(from_spins) = arch.spins {
-                                    let existing = StaffPlaylistArchive::find_by_id(existing_id)
-                                        .one(txn)
-                                        .await?;
-                                    if let Some(existing) = existing {
-                                        let current = existing.spins.unwrap_or(0);
-                                        let mut active: crate::models::staff_playlist_archives::ActiveModel = existing.into();
-                                        active.spins = Set(Some(current + from_spins));
-                                        active.update(txn).await?;
-                                    }
-                                }
-                                // Delete source
-                                let active: crate::models::staff_playlist_archives::ActiveModel =
-                                    arch.into();
-                                active.delete(txn).await?;
-                                stats.playlist_archives_aggregated += 1;
-                            } else {
-                                let mut active: crate::models::staff_playlist_archives::ActiveModel =
-                                    arch.into();
-                                active.staff_member_id = Set(Some(target_id));
-                                active.update(txn).await?;
-                                stats.playlist_archives_moved += 1;
+                    for arch in source_archives {
+                        let key = (arch.week_ending, arch.band_id, arch.album_id, arch.song_id);
+                        if let Some(&(existing_id, existing_spins)) = existing_archives.get(&key) {
+                            // Aggregate spins
+                            if let Some(from_spins) = arch.spins {
+                                let current = existing_spins.unwrap_or(0);
+                                StaffPlaylistArchive::update_many()
+                                    .filter(StaffPlaylistArchiveColumn::Id.eq(existing_id))
+                                    .col_expr(StaffPlaylistArchiveColumn::Spins, Expr::value(Some(current + from_spins)))
+                                    .exec(txn).await?;
                             }
+                            // Delete source
+                            let active: crate::models::staff_playlist_archives::ActiveModel =
+                                arch.into();
+                            active.delete(txn).await?;
+                            stats.playlist_archives_aggregated += 1;
+                        } else {
+                            let mut active: crate::models::staff_playlist_archives::ActiveModel =
+                                arch.into();
+                            active.staff_member_id = Set(Some(target_id));
+                            active.update(txn).await?;
+                            stats.playlist_archives_moved += 1;
                         }
                     }
 
@@ -947,30 +922,28 @@ impl StaffService {
 
                     // 10. Staff member duplicate candidates — reassign, remove self-refs, deduplicate pairs
                     {
-                        for from_id in &from_ids {
-                            let candidates_1 = StaffDuplicateCandidate::find()
-                                .filter(StaffDuplicateCandidateColumn::StaffMemberId1.eq(*from_id))
-                                .all(txn)
-                                .await?;
+                        let candidates_1 = StaffDuplicateCandidate::find()
+                            .filter(StaffDuplicateCandidateColumn::StaffMemberId1.is_in(from_ids.clone()))
+                            .all(txn)
+                            .await?;
 
-                            for cand in candidates_1 {
-                                let mut active: crate::models::staff_member_duplicate_candidates::ActiveModel = cand.into();
-                                active.staff_member_id_1 = Set(target_id);
-                                active.update(txn).await?;
-                                stats.duplicate_candidates_updated += 1;
-                            }
+                        for cand in candidates_1 {
+                            let mut active: crate::models::staff_member_duplicate_candidates::ActiveModel = cand.into();
+                            active.staff_member_id_1 = Set(target_id);
+                            active.update(txn).await?;
+                            stats.duplicate_candidates_updated += 1;
+                        }
 
-                            let candidates_2 = StaffDuplicateCandidate::find()
-                                .filter(StaffDuplicateCandidateColumn::StaffMemberId2.eq(*from_id))
-                                .all(txn)
-                                .await?;
+                        let candidates_2 = StaffDuplicateCandidate::find()
+                            .filter(StaffDuplicateCandidateColumn::StaffMemberId2.is_in(from_ids.clone()))
+                            .all(txn)
+                            .await?;
 
-                            for cand in candidates_2 {
-                                let mut active: crate::models::staff_member_duplicate_candidates::ActiveModel = cand.into();
-                                active.staff_member_id_2 = Set(target_id);
-                                active.update(txn).await?;
-                                stats.duplicate_candidates_updated += 1;
-                            }
+                        for cand in candidates_2 {
+                            let mut active: crate::models::staff_member_duplicate_candidates::ActiveModel = cand.into();
+                            active.staff_member_id_2 = Set(target_id);
+                            active.update(txn).await?;
+                            stats.duplicate_candidates_updated += 1;
                         }
 
                         // Remove self-refs
@@ -1064,13 +1037,8 @@ impl StaffService {
         ip_address: Option<String>,
     ) -> Result<StaffTransferResult, DbErr> {
         // Validate source staff exists
-        let source = StaffMember::find_by_id(req.staff_member_id).one(db).await?;
-        if source.is_none() {
-            return Err(DbErr::RecordNotFound(
-                "Source staff member not found".to_string(),
-            ));
-        }
-        let source = source.unwrap();
+        let source = StaffMember::find_by_id(req.staff_member_id).one(db).await?
+            .ok_or(DbErr::RecordNotFound("Source staff member not found".into()))?;
 
         // Validate target station exists
         let target_station = RadioStation::find_by_id(req.new_station_id).one(db).await?;
@@ -1222,13 +1190,8 @@ impl StaffService {
         user_id: Option<u32>,
         ip_address: Option<String>,
     ) -> Result<StaffMemberModel, DbErr> {
-        let staff = StaffMember::find_by_id(id).one(db).await?;
-        if staff.is_none() {
-            return Err(DbErr::RecordNotFound(
-                "Staff member not found".to_string(),
-            ));
-        }
-        let staff = staff.unwrap();
+        let staff = StaffMember::find_by_id(id).one(db).await?
+            .ok_or(DbErr::RecordNotFound("Staff member not found".into()))?;
 
         // Log before archiving
         let _ =
@@ -1250,13 +1213,8 @@ impl StaffService {
         user_id: Option<u32>,
         ip_address: Option<String>,
     ) -> Result<StaffMemberModel, DbErr> {
-        let staff = StaffMember::find_by_id(id).one(db).await?;
-        if staff.is_none() {
-            return Err(DbErr::RecordNotFound(
-                "Staff member not found".to_string(),
-            ));
-        }
-        let staff = staff.unwrap();
+        let staff = StaffMember::find_by_id(id).one(db).await?
+            .ok_or(DbErr::RecordNotFound("Staff member not found".into()))?;
 
         // Log before unarchiving
         let _ =
