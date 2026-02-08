@@ -1612,7 +1612,7 @@ impl AlbumService {
             true
         } else {
             // Admin has locked it to a specific value, don't change
-            false
+            true
         };
 
         AlbumGenreComputed {
