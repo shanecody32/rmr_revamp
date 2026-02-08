@@ -90,3 +90,49 @@ fn test_internal_error_generic() {
     assert_eq!(err.error.code, "INTERNAL_ERROR");
     assert_eq!(err.error.message, "An internal server error occurred");
 }
+
+#[test]
+fn test_unauthorized_error() {
+    let err = ApiError::unauthorized("Token expired");
+    assert_eq!(err.error.code, "UNAUTHORIZED");
+    assert_eq!(err.error.message, "Token expired");
+    assert!(!err.success);
+    assert!(err.error.field.is_none());
+}
+
+#[test]
+fn test_forbidden_error() {
+    let err = ApiError::forbidden("Insufficient permissions");
+    assert_eq!(err.error.code, "FORBIDDEN");
+    assert_eq!(err.error.message, "Insufficient permissions");
+    assert!(!err.success);
+}
+
+#[test]
+fn test_conflict_error() {
+    let err = ApiError::conflict("Entity already exists");
+    assert_eq!(err.error.code, "CONFLICT");
+    assert_eq!(err.error.message, "Entity already exists");
+    assert!(!err.success);
+}
+
+#[test]
+fn test_bad_request_field_is_none() {
+    let err = ApiError::bad_request("Bad input");
+    assert!(err.error.field.is_none());
+}
+
+#[test]
+fn test_internal_with_custom_message() {
+    let err = ApiError::internal("Custom internal error");
+    assert_eq!(err.error.code, "INTERNAL_ERROR");
+    assert_eq!(err.error.message, "Custom internal error");
+}
+
+#[test]
+fn test_cache_constants() {
+    use backend::views::common::{CACHE_LIST, CACHE_DETAIL, CACHE_STATIC};
+    assert_eq!(CACHE_LIST, 60);
+    assert_eq!(CACHE_DETAIL, 300);
+    assert_eq!(CACHE_STATIC, 3600);
+}

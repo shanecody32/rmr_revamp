@@ -221,3 +221,163 @@ async fn test_band_similarity_search() {
     // Just verify the query executes without error
     assert!(results.is_ok(), "Similarity search should not error: {:?}", results.err());
 }
+
+// ─── Additional Schema Validation (Phase 6) ─────────────────────────
+
+#[tokio::test]
+#[ignore]
+async fn test_radio_stations_table_has_expected_columns() {
+    let db = common::setup_test_db().await.unwrap();
+    let cols = get_columns(&db, "radio_stations").await;
+
+    for col_name in &["id", "name", "slug", "type"] {
+        assert_column_exists(&cols, col_name, "radio_stations");
+    }
+}
+
+#[tokio::test]
+#[ignore]
+async fn test_staff_members_table_has_expected_columns() {
+    let db = common::setup_test_db().await.unwrap();
+    let cols = get_columns(&db, "staff_members").await;
+
+    for col_name in &["id", "first_name", "last_name", "slug", "radio_station_id"] {
+        assert_column_exists(&cols, col_name, "staff_members");
+    }
+}
+
+#[tokio::test]
+#[ignore]
+async fn test_labels_table_has_expected_columns() {
+    let db = common::setup_test_db().await.unwrap();
+    let cols = get_columns(&db, "labels").await;
+
+    for col_name in &["id", "name", "slug"] {
+        assert_column_exists(&cols, col_name, "labels");
+    }
+}
+
+#[tokio::test]
+#[ignore]
+async fn test_action_logs_table_has_expected_columns() {
+    let db = common::setup_test_db().await.unwrap();
+    let cols = get_columns(&db, "action_logs").await;
+
+    for col_name in &["id", "entity_type", "action_type", "entity_id"] {
+        assert_column_exists(&cols, col_name, "action_logs");
+    }
+}
+
+#[tokio::test]
+#[ignore]
+async fn test_radio_station_aliases_has_phonetic_columns() {
+    let db = common::setup_test_db().await.unwrap();
+    let cols = get_columns(&db, "radio_station_aliases").await;
+
+    for col_name in &[
+        "slug",
+        "sanitized_name",
+        "soundex_key",
+        "metaphone_key",
+        "dmetaphone_key",
+        "dmetaphone_alt_key",
+    ] {
+        assert_column_exists(&cols, col_name, "radio_station_aliases");
+    }
+}
+
+// ─── Additional CRUD Round-trip Tests ───────────────────────────────
+
+#[tokio::test]
+#[ignore]
+async fn test_user_crud_round_trip() {
+    let db = common::setup_test_db().await.unwrap();
+
+    use backend::services::user_service::UserService;
+    let users = UserService::get_all_users(&db).await.unwrap();
+    assert!(!users.is_empty(), "Database should have at least one user");
+
+    let user = UserService::get_user_by_id(&db, users[0].id).await.unwrap();
+    assert!(user.is_some());
+}
+
+#[tokio::test]
+#[ignore]
+async fn test_label_crud_round_trip() {
+    let db = common::setup_test_db().await.unwrap();
+
+    use backend::services::label_service::{LabelService, LabelFilterParams};
+
+    let params = LabelFilterParams {
+        page: Some(1),
+        page_size: Some(5),
+        name: None,
+        name_filter_type: None,
+        sort_field: None,
+        sort_ascending: None,
+    };
+    let result = LabelService::get_labels(&db, params).await;
+    assert!(result.is_ok(), "get_labels should not error: {:?}", result.err());
+}
+
+// ─── Additional Similarity Search Integration ───────────────────────
+
+#[tokio::test]
+#[ignore]
+async fn test_album_similarity_search() {
+    let db = common::setup_test_db().await.unwrap();
+
+    use backend::services::types::SimilarityParams;
+    use backend::services::AlbumService;
+
+    let params = SimilarityParams {
+        search_term: "Greatest Hits".to_string(),
+        min_similarity: Some(40),
+        jw_weight: Some(0.5),
+        dice_weight: Some(0.5),
+        ..Default::default()
+    };
+
+    let results = AlbumService::get_similar_albums(&db, params).await;
+    assert!(results.is_ok(), "Album similarity search should not error: {:?}", results.err());
+}
+
+#[tokio::test]
+#[ignore]
+async fn test_song_similarity_search() {
+    let db = common::setup_test_db().await.unwrap();
+
+    use backend::services::types::SimilarityParams;
+    use backend::services::song_service::SongService;
+
+    let params = SimilarityParams {
+        search_term: "Love".to_string(),
+        min_similarity: Some(40),
+        jw_weight: Some(0.5),
+        dice_weight: Some(0.5),
+        ..Default::default()
+    };
+
+    let results = SongService::get_similar_songs(&db, params).await;
+    assert!(results.is_ok(), "Song similarity search should not error: {:?}", results.err());
+}
+
+#[tokio::test]
+#[ignore]
+async fn test_label_similarity_search() {
+    let db = common::setup_test_db().await.unwrap();
+
+    use backend::services::types::SimilarityParams;
+    use backend::services::label_service::LabelService;
+
+    let params = SimilarityParams {
+        search_term: "Records".to_string(),
+        min_similarity: Some(40),
+        jw_weight: Some(0.5),
+        dice_weight: Some(0.5),
+        ..Default::default()
+    };
+
+    let results = LabelService::get_similar_labels(&db, params).await;
+    assert!(results.is_ok(), "Label similarity search should not error: {:?}", results.err());
+}

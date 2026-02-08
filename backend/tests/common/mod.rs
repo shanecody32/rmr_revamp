@@ -73,3 +73,393 @@ where
     // Transaction is dropped without commit, so it rolls back automatically
     result
 }
+
+// ─── Test Fixtures ──────────────────────────────────────────────────
+
+/// Create a test GenreModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_genre(id: u32, name: &str) -> backend::models::genres::Model {
+    backend::models::genres::Model {
+        id,
+        name: Some(name.to_string()),
+        slug: Some(name.to_lowercase().replace(' ', "-")),
+        chart: 1,
+    }
+}
+
+/// Create a test SubGenreModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_sub_genre(id: u32, genre_id: u32, name: &str) -> backend::models::sub_genres::Model {
+    backend::models::sub_genres::Model {
+        id,
+        genre_id: Some(genre_id),
+        name: Some(name.to_string()),
+        slug: Some(name.to_lowercase().replace(' ', "-")),
+        chart: 1,
+        default: 0,
+        created: None,
+        modified: None,
+    }
+}
+
+/// Create a test CountryModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_country(id: u32, name: &str) -> backend::models::countries::Model {
+    backend::models::countries::Model {
+        id,
+        name: Some(name.to_string()),
+        slug: Some(name.to_lowercase().replace(' ', "-")),
+        continent: None,
+        region: None,
+        iso_three_digit: None,
+        iso_two_digit: None,
+        phone_reg_exp: None,
+        phone_format: None,
+        phone_code: None,
+        address_format: None,
+        chart: 1,
+    }
+}
+
+/// Create a test UserModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_user(id: u32, email: &str) -> backend::models::users::Model {
+    backend::models::users::Model {
+        id,
+        role_id: 1,
+        username: Some(email.to_string()),
+        email: Some(email.to_string()),
+        password: "hashed".to_string(),
+        first_name: Some("Test".to_string()),
+        last_name: Some("User".to_string()),
+        referred_by: None,
+        promocode: None,
+        signup_ip: None,
+        last_login_ip: None,
+        geo_ip_country_code: None,
+        primary_phone: None,
+        agreed_to_terms: 1,
+        agreed_to_pricing: 1,
+        activated: 1,
+        sub_uuid: None,
+        term: 0,
+        pay_by_check: 0,
+        exp: None,
+        radio_control: None,
+        created: None,
+        modified: None,
+    }
+}
+
+/// Create a test StateModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_state(id: u32, country_id: u32, name: &str) -> backend::models::states::Model {
+    backend::models::states::Model {
+        id,
+        country_id: Some(country_id),
+        name: Some(name.to_string()),
+        slug: Some(name.to_lowercase().replace(' ', "-")),
+        abbrv: None,
+        chart: 1,
+        new: 0,
+        correct: 0,
+        created: None,
+        modified: None,
+    }
+}
+
+/// Create a test CityModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_city(id: u32, state_id: u32, name: &str) -> backend::models::cities::Model {
+    backend::models::cities::Model {
+        id,
+        country_id: None,
+        state_id: Some(state_id),
+        name: Some(name.to_string()),
+        slug: Some(name.to_lowercase().replace(' ', "-")),
+        new: 0,
+        created: None,
+        modified: None,
+    }
+}
+
+/// Create a test BandModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_band(id: u32, name: &str) -> backend::models::bands::Model {
+    backend::models::bands::Model {
+        id,
+        city_id: None,
+        country_id: None,
+        state_id: None,
+        name: name.to_string(),
+        slug: Some(name.to_lowercase().replace(' ', "-")),
+        website: None,
+        email: None,
+        twitter: None,
+        facebook_url: None,
+        lastfm_url: None,
+        myspace_url: None,
+        bandcamp_url: None,
+        wikipedia_url: None,
+        cdbaby_url: None,
+        youtube_url: None,
+        reverb_url: None,
+        itunes_url: None,
+        instagram_url: None,
+        pinterest_url: None,
+        itunes_id: None,
+        amg_id: None,
+        rovi_id: None,
+        echo_id: None,
+        seven_digital_id: None,
+        discogs_id: None,
+        spotify_id: None,
+        rdio_id: None,
+        rss_feed: None,
+        bio: None,
+        verified: 0,
+        verified_by: None,
+        approved: 0,
+        approved_by: None,
+        reviewed_by: None,
+        hot_download: 0,
+        created: None,
+        modified: None,
+        band_type: "artist".to_string(),
+        data_status: "new".to_string(),
+        data_status_reason: None,
+        data_status_note: None,
+        data_status_at: None,
+        data_status_by: None,
+        chart_status: "pending".to_string(),
+        chart_denial_reason: None,
+        chart_status_note: None,
+        chart_status_at: None,
+        chart_status_by: None,
+    }
+}
+
+/// Create a test AlbumModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_album(id: u32, name: &str) -> backend::models::albums::Model {
+    backend::models::albums::Model {
+        id,
+        label_id: None,
+        name: Some(name.to_string()),
+        slug: Some(name.to_lowercase().replace(' ', "-")),
+        release_date: None,
+        about: None,
+        thanks: None,
+        producer: None,
+        engineer: None,
+        studio: None,
+        master: None,
+        itunes_url: None,
+        cdbaby_url: None,
+        amazon_url: None,
+        img: None,
+        itunes_id: None,
+        rovi_id: None,
+        sub_genre_for_charting: None,
+        genre_admin_set: 0,
+        compilation: 0,
+        soundtrack: 0,
+        approved: 0,
+        approved_by: None,
+        verified: 0,
+        verified_by: None,
+        created: None,
+        modified: None,
+        format: "lp".to_string(),
+        data_status: "new".to_string(),
+        data_status_reason: None,
+        data_status_note: None,
+        data_status_at: None,
+        data_status_by: None,
+        chart_status: "pending".to_string(),
+        chart_denial_reason: None,
+        chart_status_note: None,
+        chart_status_at: None,
+        chart_status_by: None,
+    }
+}
+
+/// Create a test SongModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_song(id: u32, band_id: u32, name: &str) -> backend::models::songs::Model {
+    backend::models::songs::Model {
+        id,
+        band_id: Some(band_id),
+        sub_genre_id: None,
+        name: Some(name.to_string()),
+        slug: Some(name.to_lowercase().replace(' ', "-")),
+        lyrics: None,
+        lyrics_writer: None,
+        music_writer: None,
+        license: None,
+        publisher: None,
+        length: 0,
+        release_date: None,
+        itunes_url: None,
+        itunes_img: None,
+        itunes_preview: None,
+        itunes_id: None,
+        rovi_id: None,
+        echo_id: None,
+        verified: 0,
+        verified_by: None,
+        approved: 0,
+        approved_by: None,
+        created: None,
+        modified: None,
+        version_type: "original".to_string(),
+        original_song_id: None,
+        data_status: "new".to_string(),
+        data_status_reason: None,
+        data_status_note: None,
+        data_status_at: None,
+        data_status_by: None,
+        chart_status: "pending".to_string(),
+        chart_denial_reason: None,
+        chart_status_note: None,
+        chart_status_at: None,
+        chart_status_by: None,
+    }
+}
+
+/// Create a test AlbumImageModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_album_image(id: u32, album_id: u32, path: &str) -> backend::models::album_images::Model {
+    backend::models::album_images::Model {
+        id,
+        album_id: Some(album_id),
+        path: Some(path.to_string()),
+        filename: Some(path.to_string()),
+        thumbname: None,
+        created: None,
+        modified: None,
+    }
+}
+
+/// Create a test LabelModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_label(id: u32, name: &str) -> backend::models::labels::Model {
+    backend::models::labels::Model {
+        id,
+        name: Some(name.to_string()),
+        slug: Some(name.to_lowercase().replace(' ', "-")),
+        created: None,
+        modified: None,
+    }
+}
+
+/// Create a test RadioStationModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_radio_station(id: u32, name: &str) -> backend::models::radio_stations::Model {
+    backend::models::radio_stations::Model {
+        id,
+        name: Some(name.to_string()),
+        slug: Some(name.to_lowercase().replace(' ', "-")),
+        r#type: Some("terrestrial".to_string()),
+        info: None,
+        approved: 0,
+        verified: 0,
+        automatic: 0,
+        active: 1,
+        influence: 0.0,
+        no_show: 0,
+        imported_from_file: 0,
+        created: None,
+        modified: None,
+        data_status: "new".to_string(),
+        data_status_reason: None,
+        data_status_note: None,
+        data_status_at: None,
+        data_status_by: None,
+        chart_status: "pending".to_string(),
+        chart_denial_reason: None,
+        chart_status_note: None,
+        chart_status_at: None,
+        chart_status_by: None,
+    }
+}
+
+/// Create a test StaffMemberModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_staff_member(
+    id: u32,
+    radio_station_id: Option<u32>,
+    first_name: &str,
+    last_name: &str,
+) -> backend::models::staff_members::Model {
+    backend::models::staff_members::Model {
+        id,
+        radio_station_id,
+        user_id: None,
+        orig_username: None,
+        first_name: Some(first_name.to_string()),
+        last_name: Some(last_name.to_string()),
+        slug: None,
+        on_air_name: None,
+        position: None,
+        email: None,
+        show_name: None,
+        start_time: None,
+        end_time: None,
+        days_on: None,
+        bio: None,
+        show_description: None,
+        has_playlist: 0,
+        applied: 0,
+        approved: 0,
+        verified: 0,
+        automatic: 0,
+        playlist_finalised: 0,
+        reported: 0,
+        lw_reported: 0,
+        last_reported: None,
+        station_control: 0,
+        spotlight: 0,
+        imported_from_file: 0,
+        archived: 0,
+        archived_at: None,
+        archived_reason: None,
+        transferred_to_id: None,
+        transferred_from_id: None,
+        admin_editable: 0,
+        created: None,
+        modified: None,
+        data_status: "new".to_string(),
+        data_status_reason: None,
+        data_status_note: None,
+        data_status_at: None,
+        data_status_by: None,
+        chart_status: "pending".to_string(),
+        chart_denial_reason: None,
+        chart_status_note: None,
+        chart_status_at: None,
+        chart_status_by: None,
+    }
+}
+
+/// Create a test ActionLogModel with minimal fields.
+#[allow(dead_code)]
+pub fn make_test_action_log(
+    id: u32,
+    action_type: &str,
+    entity_type: &str,
+    entity_id: u32,
+) -> backend::models::action_logs::Model {
+    backend::models::action_logs::Model {
+        id,
+        action_type: action_type.to_string(),
+        entity_type: entity_type.to_string(),
+        entity_id,
+        user_id: None,
+        before_snapshot: None,
+        after_snapshot: None,
+        metadata: None,
+        ip_address: None,
+        created_at: chrono::NaiveDateTime::default(),
+    }
+}

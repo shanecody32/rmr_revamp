@@ -219,3 +219,341 @@ mod staff_playlist_service {
         assert_eq!(result, 10);
     }
 }
+
+// ─── User Service ───────────────────────────────────────────────────
+
+mod user_service {
+    use super::*;
+    use backend::models::users::Model as UserModel;
+    use backend::services::user_service::UserService;
+
+    fn make_user(id: u32, email: &str) -> UserModel {
+        UserModel {
+            id,
+            role_id: 1,
+            username: Some(email.to_string()),
+            email: Some(email.to_string()),
+            password: "hashed".to_string(),
+            first_name: Some("Test".to_string()),
+            last_name: Some("User".to_string()),
+            referred_by: None,
+            promocode: None,
+            signup_ip: None,
+            last_login_ip: None,
+            geo_ip_country_code: None,
+            primary_phone: None,
+            agreed_to_terms: 1,
+            agreed_to_pricing: 1,
+            activated: 1,
+            sub_uuid: None,
+            term: 0,
+            pay_by_check: 0,
+            exp: None,
+            radio_control: None,
+            created: None,
+            modified: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_all_users_returns_list() {
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            .append_query_results(vec![vec![
+                make_user(1, "alice@example.com"),
+                make_user(2, "bob@example.com"),
+            ]])
+            .into_connection();
+
+        let users = UserService::get_all_users(&db).await.unwrap();
+        assert_eq!(users.len(), 2);
+        assert_eq!(users[0].email.as_deref(), Some("alice@example.com"));
+        assert_eq!(users[1].email.as_deref(), Some("bob@example.com"));
+    }
+
+    #[tokio::test]
+    async fn test_get_all_users_empty() {
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            .append_query_results(vec![Vec::<UserModel>::new()])
+            .into_connection();
+
+        let users = UserService::get_all_users(&db).await.unwrap();
+        assert!(users.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_get_user_by_id_found() {
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            .append_query_results(vec![vec![make_user(1, "alice@example.com")]])
+            .into_connection();
+
+        let user = UserService::get_user_by_id(&db, 1).await.unwrap();
+        assert!(user.is_some());
+        assert_eq!(user.unwrap().id, 1);
+    }
+
+    #[tokio::test]
+    async fn test_get_user_by_id_not_found() {
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            .append_query_results(vec![Vec::<UserModel>::new()])
+            .into_connection();
+
+        let user = UserService::get_user_by_id(&db, 999).await.unwrap();
+        assert!(user.is_none());
+    }
+}
+
+// ─── Auth Service ───────────────────────────────────────────────────
+
+mod auth_service {
+    use super::*;
+    use backend::models::users::Model as UserModel;
+    use backend::services::auth_service::{AuthService, LoginRequest};
+
+    fn make_user(id: u32, email: &str) -> UserModel {
+        UserModel {
+            id,
+            role_id: 1,
+            username: Some(email.to_string()),
+            email: Some(email.to_string()),
+            password: "hashed".to_string(),
+            first_name: Some("Test".to_string()),
+            last_name: Some("User".to_string()),
+            referred_by: None,
+            promocode: None,
+            signup_ip: None,
+            last_login_ip: None,
+            geo_ip_country_code: None,
+            primary_phone: None,
+            agreed_to_terms: 1,
+            agreed_to_pricing: 1,
+            activated: 1,
+            sub_uuid: None,
+            term: 0,
+            pay_by_check: 0,
+            exp: None,
+            radio_control: None,
+            created: None,
+            modified: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_login_success() {
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            .append_query_results(vec![vec![make_user(1, "alice@example.com")]])
+            .into_connection();
+
+        let req = LoginRequest {
+            email: "alice@example.com".to_string(),
+            password: None,
+        };
+        let result = AuthService::login(&db, req).await.unwrap();
+        assert_eq!(result.user.email.as_deref(), Some("alice@example.com"));
+        assert!(!result.token.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_login_user_not_found() {
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            .append_query_results(vec![Vec::<UserModel>::new()])
+            .into_connection();
+
+        let req = LoginRequest {
+            email: "nobody@example.com".to_string(),
+            password: None,
+        };
+        let result = AuthService::login(&db, req).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_get_current_user() {
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            .append_query_results(vec![vec![make_user(1, "alice@example.com")]])
+            .into_connection();
+
+        let user = AuthService::get_current_user(&db).await.unwrap();
+        assert!(user.is_some());
+        assert_eq!(user.unwrap().id, 1);
+    }
+}
+
+// ─── Location Service Extended ──────────────────────────────────────
+
+mod location_service_extended {
+    use super::*;
+    use backend::models::states::Model as StateModel;
+    use backend::models::cities::Model as CityModel;
+    use backend::services::location_service::LocationService;
+
+    fn make_state(id: u32, country_id: u32, name: &str) -> StateModel {
+        StateModel {
+            id,
+            country_id: Some(country_id),
+            name: Some(name.to_string()),
+            slug: Some(name.to_lowercase().replace(' ', "-")),
+            abbrv: None,
+            chart: 1,
+            new: 0,
+            correct: 0,
+            created: None,
+            modified: None,
+        }
+    }
+
+    fn make_city(id: u32, state_id: u32, name: &str) -> CityModel {
+        CityModel {
+            id,
+            country_id: None,
+            state_id: Some(state_id),
+            name: Some(name.to_string()),
+            slug: Some(name.to_lowercase().replace(' ', "-")),
+            new: 0,
+            created: None,
+            modified: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_states_returns_list() {
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            .append_query_results(vec![vec![
+                make_state(1, 1, "Texas"),
+                make_state(2, 1, "Tennessee"),
+            ]])
+            .into_connection();
+
+        let states = LocationService::get_states(&db, None).await.unwrap();
+        assert_eq!(states.len(), 2);
+        assert_eq!(states[0].name.as_deref(), Some("Texas"));
+    }
+
+    #[tokio::test]
+    async fn test_get_state_by_id_found() {
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            .append_query_results(vec![vec![make_state(1, 1, "Texas")]])
+            .into_connection();
+
+        let state = LocationService::get_state_by_id(&db, 1).await.unwrap();
+        assert!(state.is_some());
+        assert_eq!(state.unwrap().name.as_deref(), Some("Texas"));
+    }
+
+    #[tokio::test]
+    async fn test_get_cities_returns_list() {
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            .append_query_results(vec![vec![
+                make_city(1, 1, "Austin"),
+                make_city(2, 1, "Nashville"),
+            ]])
+            .into_connection();
+
+        let cities = LocationService::get_cities(&db, None, None).await.unwrap();
+        assert_eq!(cities.len(), 2);
+        assert_eq!(cities[0].name.as_deref(), Some("Austin"));
+    }
+
+    #[tokio::test]
+    async fn test_get_city_by_id_not_found() {
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            .append_query_results(vec![Vec::<CityModel>::new()])
+            .into_connection();
+
+        let city = LocationService::get_city_by_id(&db, 999).await.unwrap();
+        assert!(city.is_none());
+    }
+}
+
+// ─── Action Log Service ─────────────────────────────────────────────
+
+mod action_log_service {
+    use super::*;
+    use backend::models::action_logs::Model as ActionLogModel;
+    use backend::services::action_log_service::ActionLogService;
+    use backend::models::action_logs::{action_types, entity_types};
+
+    fn make_log(id: u32, action_type: &str, entity_type: &str, entity_id: u32) -> ActionLogModel {
+        ActionLogModel {
+            id,
+            action_type: action_type.to_string(),
+            entity_type: entity_type.to_string(),
+            entity_id,
+            user_id: None,
+            before_snapshot: None,
+            after_snapshot: None,
+            metadata: None,
+            ip_address: None,
+            created_at: chrono::NaiveDateTime::default(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_record_creates_action_log() {
+        // insert does: exec (INSERT) then query (SELECT to return the model)
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            .append_exec_results(vec![MockExecResult {
+                last_insert_id: 1,
+                rows_affected: 1,
+            }])
+            .append_query_results(vec![vec![
+                make_log(1, action_types::BAND_MERGE, entity_types::BAND, 42),
+            ]])
+            .into_connection();
+
+        let log = ActionLogService::record(
+            &db,
+            action_types::BAND_MERGE,
+            entity_types::BAND,
+            42,
+            Some(1),
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(log.entity_id, 42);
+        assert_eq!(log.action_type, action_types::BAND_MERGE);
+    }
+
+    #[tokio::test]
+    async fn test_get_logs_for_entity_returns_list() {
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            .append_query_results(vec![vec![
+                make_log(1, action_types::BAND_MERGE, entity_types::BAND, 42),
+                make_log(2, action_types::DATA_STATUS_CHANGE, entity_types::BAND, 42),
+            ]])
+            .into_connection();
+
+        let logs = ActionLogService::get_logs_for_entity(&db, entity_types::BAND, 42, 10)
+            .await
+            .unwrap();
+        assert_eq!(logs.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_get_logs_for_entity_empty() {
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            .append_query_results(vec![Vec::<ActionLogModel>::new()])
+            .into_connection();
+
+        let logs = ActionLogService::get_logs_for_entity(&db, entity_types::BAND, 999, 10)
+            .await
+            .unwrap();
+        assert!(logs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_get_recent_logs_returns_list() {
+        let db = MockDatabase::new(DatabaseBackend::MySql)
+            .append_query_results(vec![vec![
+                make_log(1, action_types::STAFF_MERGE, entity_types::STAFF_MEMBER, 1),
+            ]])
+            .into_connection();
+
+        let logs = ActionLogService::get_recent_logs(&db, 5).await.unwrap();
+        assert_eq!(logs.len(), 1);
+        assert_eq!(logs[0].action_type, action_types::STAFF_MERGE);
+    }
+}
