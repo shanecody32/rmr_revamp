@@ -9,6 +9,7 @@ import type {
     StaffSimilarityParams,
     MergeStaffRequest,
     StaffMergeResult,
+    StaffMergePreviewResponse,
     StaffTransferRequest,
     StaffTransferResult,
     ArchiveStaffRequest,
@@ -147,8 +148,11 @@ export const fetchSimilarStaff = async (params: StaffSimilarityParams): Promise<
     try {
         const response = await api.get<SimilarStaff[]>('/staff_members/similar', {params});
         return response.data;
-    } catch (error) {
-        console.error('Error fetching similar staff:', error);
+    } catch (error: any) {
+        const status = error?.response?.status;
+        const data = error?.response?.data;
+        const msg = error?.message;
+        console.error('Error fetching similar staff:', {status, data, message: msg, params});
         throw error;
     }
 };
@@ -169,6 +173,16 @@ export const mergeStaff = async (data: MergeStaffRequest): Promise<StaffMergeRes
         console.error('Error merging staff members:', error);
         throw error;
     }
+};
+
+/**
+ * Fetch merge preview with related data counts for each staff member.
+ */
+export const fetchStaffMergePreview = async (ids: number[]): Promise<StaffMergePreviewResponse> => {
+    const response = await api.get<StaffMergePreviewResponse>('/staff_members/merge-preview', {
+        params: { ids: ids.join(',') }
+    });
+    return response.data;
 };
 
 // =============================================================================

@@ -22,6 +22,9 @@ use crate::models::staff_members_sub_genres::{
     Entity as StaffSubGenres,
 };
 use crate::models::radio_stations::Entity as RadioStation;
+use crate::models::radio_addresses::{Entity as RadioAddress, Column as RadioAddressColumn};
+use crate::models::cities::Entity as City;
+use crate::models::states::Entity as State;
 use crate::models::staff_member_duplicate_candidates::{Entity as StaffDuplicateCandidate, Column as StaffDuplicateCandidateColumn};
 use crate::models::songs::{Column as SongColumn, Entity as Song};
 use crate::services::action_log_service::ActionLogService;
@@ -38,6 +41,15 @@ use utoipa::{IntoParams, ToSchema};
 // Type aliases for complex HashMap types used in playlist aggregation
 type PlaylistKey = (Option<u32>, Option<u32>, Option<u32>);
 type StaffArchiveKey = (Option<chrono::NaiveDate>, Option<u32>, Option<u32>, Option<u32>);
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct SimilarStaffResult {
+    #[serde(flatten)]
+    pub staff: StaffMemberModel,
+    pub similarity_score: i32,
+    pub station_name: Option<String>,
+    pub station_location: Option<String>,
+}
 
 pub struct StaffService;
 
@@ -110,6 +122,46 @@ pub struct StaffMergeStats {
 pub struct StaffMergeResult {
     pub merged_staff: StaffMemberModel,
     pub stats: StaffMergeStats,
+}
+
+#[derive(Debug, Serialize, ToSchema, Default)]
+pub struct StaffRelatedCounts {
+    pub images: u64,
+    pub links: u64,
+    pub phones: u64,
+    pub addresses: u64,
+    pub aliases: u64,
+    pub playlists: u64,
+    pub playlist_archives: u64,
+    pub sub_genres: u64,
+    pub duplicate_candidates: u64,
+}
+
+impl StaffRelatedCounts {
+    fn add(&mut self, other: &StaffRelatedCounts) {
+        self.images += other.images;
+        self.links += other.links;
+        self.phones += other.phones;
+        self.addresses += other.addresses;
+        self.aliases += other.aliases;
+        self.playlists += other.playlists;
+        self.playlist_archives += other.playlist_archives;
+        self.sub_genres += other.sub_genres;
+        self.duplicate_candidates += other.duplicate_candidates;
+    }
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct StaffMergePreview {
+    pub staff_id: u32,
+    pub staff_name: String,
+    pub counts: StaffRelatedCounts,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct StaffMergePreviewResponse {
+    pub staff: Vec<StaffMergePreview>,
+    pub totals: StaffRelatedCounts,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -537,7 +589,7 @@ impl StaffService {
     pub async fn get_similar_staff_members(
         db: &DatabaseConnection,
         params: SimilarityParams,
-    ) -> Result<Vec<SimilarResult<StaffMemberModel>>, DbErr> {
+    ) -> Result<Vec<SimilarStaffResult>, DbErr> {
         let mut query = StaffMemberAlias::find();
 
         // Station scoping - always restrict to station if provided
@@ -605,7 +657,107 @@ impl StaffService {
         let mut seen = HashSet::new();
         final_results.retain(|r| seen.insert(r.model.id));
 
-        Ok(final_results)
+        // Enrich with station names and locations
+        let station_ids: Vec<u32> = final_results
+            .iter()
+            .filter_map(|r| r.model.radio_station_id)
+            .collect();
+
+        let station_names: HashMap<u32, String> = if !station_ids.is_empty() {
+            RadioStation::find()
+                .filter(crate::models::radio_stations::Column::Id.is_in(station_ids.clone()))
+                .all(db)
+                .await?
+                .into_iter()
+                .filter_map(|s| s.name.map(|n| (s.id, n)))
+                .collect()
+        } else {
+            HashMap::new()
+        };
+
+        let location_map = Self::build_station_location_map(db, &station_ids).await?;
+
+        let enriched = final_results
+            .into_iter()
+            .map(|r| {
+                let sid = r.model.radio_station_id;
+                let station_name = sid.and_then(|id| station_names.get(&id).cloned());
+                let station_location = sid.and_then(|id| location_map.get(&id).cloned());
+                SimilarStaffResult {
+                    staff: r.model,
+                    similarity_score: r.similarity_score,
+                    station_name,
+                    station_location,
+                }
+            })
+            .collect();
+
+        Ok(enriched)
+    }
+
+    /// Batch-load location strings ("City, ST") for a set of station IDs.
+    async fn build_station_location_map(
+        db: &DatabaseConnection,
+        station_ids: &[u32],
+    ) -> Result<HashMap<u32, String>, DbErr> {
+        if station_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let addresses = RadioAddress::find()
+            .filter(RadioAddressColumn::RadioStationId.is_in(station_ids.to_vec()))
+            .all(db)
+            .await?;
+
+        // Keep only first address per station
+        let mut first_addr: HashMap<u32, (Option<u32>, Option<u32>)> = HashMap::new();
+        for addr in &addresses {
+            if let Some(station_id) = addr.radio_station_id {
+                first_addr.entry(station_id).or_insert((addr.city_id, addr.state_id));
+            }
+        }
+
+        let city_ids: Vec<u32> = first_addr.values().filter_map(|(c, _)| *c).collect();
+        let state_ids: Vec<u32> = first_addr.values().filter_map(|(_, s)| *s).collect();
+
+        let city_names: HashMap<u32, String> = if !city_ids.is_empty() {
+            City::find()
+                .filter(crate::models::cities::Column::Id.is_in(city_ids))
+                .all(db)
+                .await?
+                .into_iter()
+                .filter_map(|c| c.name.map(|n| (c.id, n)))
+                .collect()
+        } else {
+            HashMap::new()
+        };
+
+        let state_abbrvs: HashMap<u32, String> = if !state_ids.is_empty() {
+            State::find()
+                .filter(crate::models::states::Column::Id.is_in(state_ids))
+                .all(db)
+                .await?
+                .into_iter()
+                .filter_map(|s| s.abbrv.map(|a| (s.id, a)))
+                .collect()
+        } else {
+            HashMap::new()
+        };
+
+        let mut location_map: HashMap<u32, String> = HashMap::new();
+        for (station_id, (city_id, state_id)) in &first_addr {
+            let city = city_id.and_then(|id| city_names.get(&id));
+            let state = state_id.and_then(|id| state_abbrvs.get(&id));
+            let location = match (city, state) {
+                (Some(c), Some(s)) => format!("{}, {}", c, s),
+                (Some(c), None) => c.clone(),
+                (None, Some(s)) => s.clone(),
+                (None, None) => continue,
+            };
+            location_map.insert(*station_id, location);
+        }
+
+        Ok(location_map)
     }
 
     // ------------------------------------------------------------------------
@@ -1555,5 +1707,84 @@ impl StaffService {
             .collect();
 
         Ok(results)
+    }
+
+    pub async fn get_staff_merge_preview(
+        db: &DatabaseConnection,
+        staff_ids: Vec<u32>,
+    ) -> Result<StaffMergePreviewResponse, DbErr> {
+        let members = StaffMember::find()
+            .filter(StaffColumn::Id.is_in(staff_ids.clone()))
+            .all(db)
+            .await?;
+
+        let member_map: HashMap<u32, StaffMemberModel> = members.into_iter().map(|m| (m.id, m)).collect();
+
+        let mut previews = Vec::new();
+        let mut totals = StaffRelatedCounts::default();
+
+        for &id in &staff_ids {
+            let staff_name = member_map.get(&id).map(|m| {
+                let on_air = m.on_air_name.as_deref().unwrap_or("").trim();
+                if !on_air.is_empty() {
+                    return on_air.to_string();
+                }
+                let first = m.first_name.as_deref().unwrap_or("").trim();
+                let last = m.last_name.as_deref().unwrap_or("").trim();
+                match (first.is_empty(), last.is_empty()) {
+                    (false, false) => format!("{} {}", first, last),
+                    (false, true) => first.to_string(),
+                    (true, false) => last.to_string(),
+                    (true, true) => "Unknown".to_string(),
+                }
+            }).unwrap_or_else(|| format!("Staff {}", id));
+
+            let counts = StaffRelatedCounts {
+                images: StaffImage::find()
+                    .filter(StaffImageColumn::StaffMemberId.eq(id))
+                    .count(db).await?,
+                links: StaffLink::find()
+                    .filter(StaffLinkColumn::StaffMemberId.eq(id))
+                    .count(db).await?,
+                phones: StaffPhone::find()
+                    .filter(StaffPhoneColumn::StaffMemberId.eq(id))
+                    .count(db).await?,
+                addresses: StaffAddress::find()
+                    .filter(StaffAddressColumn::StaffMemberId.eq(id))
+                    .count(db).await?,
+                aliases: StaffMemberAlias::find()
+                    .filter(StaffMemberAliasColumn::StaffMemberId.eq(id))
+                    .count(db).await?,
+                playlists: StaffPlaylist::find()
+                    .filter(StaffPlaylistColumn::StaffMemberId.eq(id))
+                    .filter(StaffPlaylistColumn::Id.is_not_null())
+                    .count(db).await?,
+                playlist_archives: StaffPlaylistArchive::find()
+                    .filter(StaffPlaylistArchiveColumn::StaffMemberId.eq(id))
+                    .count(db).await?,
+                sub_genres: StaffSubGenres::find()
+                    .filter(StaffSubGenreColumn::StaffMemberId.eq(id))
+                    .count(db).await?,
+                duplicate_candidates: StaffDuplicateCandidate::find()
+                    .filter(
+                        Condition::any()
+                            .add(StaffDuplicateCandidateColumn::StaffMemberId1.eq(id))
+                            .add(StaffDuplicateCandidateColumn::StaffMemberId2.eq(id))
+                    )
+                    .count(db).await?,
+            };
+
+            totals.add(&counts);
+            previews.push(StaffMergePreview {
+                staff_id: id,
+                staff_name,
+                counts,
+            });
+        }
+
+        Ok(StaffMergePreviewResponse {
+            staff: previews,
+            totals,
+        })
     }
 }

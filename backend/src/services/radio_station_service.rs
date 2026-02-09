@@ -25,6 +25,8 @@ use crate::models::radio_raw_datas::{Entity as RadioRawData, Column as RadioRawD
 use crate::models::song_aliases::{Entity as SongAlias, Column as SongAliasColumn};
 use crate::models::album_aliases::{Entity as AlbumAlias, Column as AlbumAliasColumn};
 use crate::models::radio_station_duplicate_candidates::{Entity as RadioStationDuplicateCandidate, Column as RadioStationDuplicateCandidateColumn};
+use crate::models::cities::Entity as City;
+use crate::models::states::Entity as State;
 use crate::services::action_log_service::ActionLogService;
 use serde::Serialize;
 use utoipa::ToSchema;
@@ -35,6 +37,14 @@ type PlaylistKey = (Option<u32>, Option<u32>, Option<u32>);
 type PlaylistValue = (u32, i32, i32);
 type ArchiveKey = (Option<u32>, Option<u32>, Option<u32>, Option<chrono::NaiveDate>);
 type ArchiveValue = (u32, i32, i32);
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct SimilarRadioStationResult {
+    #[serde(flatten)]
+    pub station: RadioStationModel,
+    pub similarity_score: i32,
+    pub location: Option<String>,
+}
 
 pub struct RadioStationService;
 
@@ -94,6 +104,68 @@ pub struct RadioStationMergeStats {
 pub struct RadioStationMergeResult {
     pub merged_station: RadioStationModel,
     pub stats: RadioStationMergeStats,
+}
+
+#[derive(Debug, Serialize, ToSchema, Default)]
+pub struct RadioStationRelatedCounts {
+    pub addresses: u64,
+    pub affiliates: u64,
+    pub emails: u64,
+    pub images: u64,
+    pub links: u64,
+    pub phone_numbers: u64,
+    pub internet_details: u64,
+    pub satellite_details: u64,
+    pub syndicated_details: u64,
+    pub terrestrial_details: u64,
+    pub staff_members: u64,
+    pub sub_genres: u64,
+    pub users: u64,
+    pub playlists: u64,
+    pub playlist_archives: u64,
+    pub raw_data: u64,
+    pub song_aliases: u64,
+    pub album_aliases: u64,
+    pub station_aliases: u64,
+    pub duplicate_candidates: u64,
+}
+
+impl RadioStationRelatedCounts {
+    fn add(&mut self, other: &RadioStationRelatedCounts) {
+        self.addresses += other.addresses;
+        self.affiliates += other.affiliates;
+        self.emails += other.emails;
+        self.images += other.images;
+        self.links += other.links;
+        self.phone_numbers += other.phone_numbers;
+        self.internet_details += other.internet_details;
+        self.satellite_details += other.satellite_details;
+        self.syndicated_details += other.syndicated_details;
+        self.terrestrial_details += other.terrestrial_details;
+        self.staff_members += other.staff_members;
+        self.sub_genres += other.sub_genres;
+        self.users += other.users;
+        self.playlists += other.playlists;
+        self.playlist_archives += other.playlist_archives;
+        self.raw_data += other.raw_data;
+        self.song_aliases += other.song_aliases;
+        self.album_aliases += other.album_aliases;
+        self.station_aliases += other.station_aliases;
+        self.duplicate_candidates += other.duplicate_candidates;
+    }
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct RadioStationMergePreview {
+    pub station_id: u32,
+    pub station_name: String,
+    pub counts: RadioStationRelatedCounts,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct RadioStationMergePreviewResponse {
+    pub stations: Vec<RadioStationMergePreview>,
+    pub totals: RadioStationRelatedCounts,
 }
 
 impl RadioStationService {
@@ -186,7 +258,7 @@ impl RadioStationService {
     pub async fn get_similar_radio_stations(
         db: &DatabaseConnection,
         params: SimilarityParams,
-    ) -> Result<Vec<SimilarResult<RadioStationModel>>, DbErr> {
+    ) -> Result<Vec<SimilarRadioStationResult>, DbErr> {
         let mut query = RadioStationAlias::find();
 
         if let Some(true) = params.restrict_to_parent
@@ -231,7 +303,7 @@ impl RadioStationService {
         }
 
         let stations = RadioStation::find()
-            .filter(crate::models::radio_stations::Column::Id.is_in(rs_ids))
+            .filter(crate::models::radio_stations::Column::Id.is_in(rs_ids.clone()))
             .all(db)
             .await?;
 
@@ -246,10 +318,93 @@ impl RadioStationService {
             if final_results.len() >= 50 { break; }
         }
 
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = HashSet::new();
         final_results.retain(|r| seen.insert(r.model.id));
 
-        Ok(final_results)
+        // Enrich with location data
+        let location_map = Self::build_station_location_map(db, &rs_ids).await?;
+
+        let enriched = final_results
+            .into_iter()
+            .map(|r| {
+                let location = location_map.get(&r.model.id).cloned();
+                SimilarRadioStationResult {
+                    station: r.model,
+                    similarity_score: r.similarity_score,
+                    location,
+                }
+            })
+            .collect();
+
+        Ok(enriched)
+    }
+
+    /// Batch-load location strings ("City, ST") for a set of station IDs.
+    async fn build_station_location_map(
+        db: &DatabaseConnection,
+        station_ids: &[u32],
+    ) -> Result<HashMap<u32, String>, DbErr> {
+        if station_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        // Load first address per station
+        let addresses = RadioAddress::find()
+            .filter(RadioAddressColumn::RadioStationId.is_in(station_ids.to_vec()))
+            .all(db)
+            .await?;
+
+        // Keep only first address per station
+        let mut first_addr: HashMap<u32, (Option<u32>, Option<u32>)> = HashMap::new();
+        for addr in &addresses {
+            if let Some(station_id) = addr.radio_station_id {
+                first_addr.entry(station_id).or_insert((addr.city_id, addr.state_id));
+            }
+        }
+
+        // Collect unique city and state IDs
+        let city_ids: Vec<u32> = first_addr.values().filter_map(|(c, _)| *c).collect();
+        let state_ids: Vec<u32> = first_addr.values().filter_map(|(_, s)| *s).collect();
+
+        let city_names: HashMap<u32, String> = if !city_ids.is_empty() {
+            City::find()
+                .filter(crate::models::cities::Column::Id.is_in(city_ids))
+                .all(db)
+                .await?
+                .into_iter()
+                .filter_map(|c| c.name.map(|n| (c.id, n)))
+                .collect()
+        } else {
+            HashMap::new()
+        };
+
+        let state_abbrvs: HashMap<u32, String> = if !state_ids.is_empty() {
+            State::find()
+                .filter(crate::models::states::Column::Id.is_in(state_ids))
+                .all(db)
+                .await?
+                .into_iter()
+                .filter_map(|s| s.abbrv.map(|a| (s.id, a)))
+                .collect()
+        } else {
+            HashMap::new()
+        };
+
+        // Build "City, ST" strings
+        let mut location_map: HashMap<u32, String> = HashMap::new();
+        for (station_id, (city_id, state_id)) in &first_addr {
+            let city = city_id.and_then(|id| city_names.get(&id));
+            let state = state_id.and_then(|id| state_abbrvs.get(&id));
+            let location = match (city, state) {
+                (Some(c), Some(s)) => format!("{}, {}", c, s),
+                (Some(c), None) => c.clone(),
+                (None, Some(s)) => s.clone(),
+                (None, None) => continue,
+            };
+            location_map.insert(*station_id, location);
+        }
+
+        Ok(location_map)
     }
 
     pub async fn merge_radio_stations(
@@ -921,5 +1076,106 @@ impl RadioStationService {
         ).await;
 
         Ok(result)
+    }
+
+    pub async fn get_radio_station_merge_preview(
+        db: &DatabaseConnection,
+        station_ids: Vec<u32>,
+    ) -> Result<RadioStationMergePreviewResponse, DbErr> {
+        let stations = RadioStation::find()
+            .filter(crate::models::radio_stations::Column::Id.is_in(station_ids.clone()))
+            .all(db)
+            .await?;
+
+        let station_map: HashMap<u32, RadioStationModel> = stations.into_iter().map(|s| (s.id, s)).collect();
+
+        let mut previews = Vec::new();
+        let mut totals = RadioStationRelatedCounts::default();
+
+        for &id in &station_ids {
+            let station_name = station_map
+                .get(&id)
+                .and_then(|s| s.name.clone())
+                .unwrap_or_else(|| format!("Station {}", id));
+
+            let counts = RadioStationRelatedCounts {
+                addresses: RadioAddress::find()
+                    .filter(RadioAddressColumn::RadioStationId.eq(id))
+                    .count(db).await?,
+                affiliates: RadioAffiliate::find()
+                    .filter(RadioAffiliateColumn::RadioStationId.eq(id))
+                    .count(db).await?,
+                emails: RadioEmail::find()
+                    .filter(RadioEmailColumn::RadioStationId.eq(id))
+                    .count(db).await?,
+                images: RadioImage::find()
+                    .filter(RadioImageColumn::RadioStationId.eq(id))
+                    .count(db).await?,
+                links: RadioLink::find()
+                    .filter(RadioLinkColumn::RadioStationId.eq(id))
+                    .count(db).await?,
+                phone_numbers: RadioPhone::find()
+                    .filter(RadioPhoneColumn::RadioStationId.eq(id))
+                    .count(db).await?,
+                internet_details: RadioInternetDetail::find()
+                    .filter(RadioInternetDetailColumn::RadioStationId.eq(id))
+                    .count(db).await?,
+                satellite_details: RadioSatelliteDetail::find()
+                    .filter(RadioSatelliteDetailColumn::RadioStationId.eq(id))
+                    .count(db).await?,
+                syndicated_details: RadioSyndicatedDetail::find()
+                    .filter(RadioSyndicatedDetailColumn::RadioStationId.eq(id))
+                    .count(db).await?,
+                terrestrial_details: RadioTerrestrialDetail::find()
+                    .filter(RadioTerrestrialDetailColumn::RadioStationId.eq(id))
+                    .count(db).await?,
+                staff_members: StaffMember::find()
+                    .filter(StaffMemberColumn::RadioStationId.eq(id))
+                    .count(db).await?,
+                sub_genres: RadioStationSubGenre::find()
+                    .filter(RadioStationSubGenreColumn::RadioStationId.eq(id))
+                    .count(db).await?,
+                users: RadioStationUser::find()
+                    .filter(RadioStationUserColumn::RadioStationId.eq(id))
+                    .count(db).await?,
+                playlists: RadioPlaylist::find()
+                    .filter(RadioPlaylistColumn::RadioStationId.eq(id))
+                    .count(db).await?,
+                playlist_archives: RadioPlaylistArchive::find()
+                    .filter(RadioPlaylistArchiveColumn::RadioStationId.eq(id))
+                    .count(db).await?,
+                raw_data: RadioRawData::find()
+                    .filter(RadioRawDataColumn::RadioStationId.eq(id))
+                    .count(db).await?,
+                song_aliases: SongAlias::find()
+                    .filter(SongAliasColumn::RadioStationId.eq(id))
+                    .count(db).await?,
+                album_aliases: AlbumAlias::find()
+                    .filter(AlbumAliasColumn::RadioStationId.eq(id))
+                    .count(db).await?,
+                station_aliases: RadioStationAlias::find()
+                    .filter(RadioStationAliasColumn::RadioStationId.eq(id))
+                    .count(db).await?,
+                duplicate_candidates: RadioStationDuplicateCandidate::find()
+                    .filter(
+                        Condition::any()
+                            .add(RadioStationDuplicateCandidateColumn::RadioStationId1.eq(id))
+                            .add(RadioStationDuplicateCandidateColumn::RadioStationId2.eq(id))
+                    )
+                    .count(db).await?,
+            };
+
+            totals.add(&counts);
+            previews.push(RadioStationMergePreview {
+                station_id: id,
+                station_name,
+                counts,
+            });
+        }
+
+        Ok(RadioStationMergePreviewResponse {
+            stations: previews,
+            totals,
+        })
     }
 }

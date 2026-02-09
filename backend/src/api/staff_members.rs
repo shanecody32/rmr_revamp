@@ -5,11 +5,13 @@ use axum::{
     routing::{delete, get, post, put},
     Json, Router,
 };
+use serde::Deserialize;
 use crate::services::staff_service::{
     ArchiveStaffRequest, MergeStaffRequest, StaffDetailParams, StaffFilterParams,
-    StaffMergeResult, StaffResponse, StaffService, StaffTransferRequest, StaffTransferResult,
+    StaffMergeResult, StaffMergePreviewResponse, StaffResponse, StaffService, StaffTransferRequest, StaffTransferResult,
 };
-use crate::services::types::{PaginatedResponse, SimilarityParams, SimilarResult};
+use crate::services::types::{PaginatedResponse, SimilarityParams};
+use crate::services::staff_service::SimilarStaffResult;
 use crate::views::staff::{StaffDetailView, StaffListViewEnriched};
 use crate::views::{ApiError, ApiResponse};
 use crate::job_state::AppState;
@@ -23,6 +25,7 @@ pub fn router() -> Router<AppState> {
         .route("/", post(create_staff_member))
         .route("/similar", get(get_similar_staff_members))
         .route("/merge", post(merge_staff_members))
+        .route("/merge-preview", get(merge_preview))
         .route("/{id}", get(get_staff_member))
         .route("/{id}/detail", get(get_staff_member_detail))
         .route("/{id}", put(update_staff_member))
@@ -105,7 +108,7 @@ pub(crate) async fn create_staff_member(
     path = "/staff_members/similar",
     params(SimilarityParams),
     responses(
-        (status = 200, description = "List similar staff members", body = [SimilarResult<StaffMemberModel>]),
+        (status = 200, description = "List similar staff members", body = [SimilarStaffResult]),
         (status = 500, description = "Internal server error")
     )
 )]
@@ -116,6 +119,42 @@ pub(crate) async fn get_similar_staff_members(
     match StaffService::get_similar_staff_members(&state.db, params).await {
         Ok(results) => (StatusCode::OK, Json(results)).into_response(),
         Err(e) => ApiError::from(e).into_response(),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct MergePreviewParams {
+    ids: String,
+}
+
+#[utoipa::path(
+    get,
+    path = "/staff_members/merge-preview",
+    params(
+        ("ids" = String, Query, description = "Comma-separated staff member IDs")
+    ),
+    responses(
+        (status = 200, description = "Merge preview with related data counts", body = StaffMergePreviewResponse),
+        (status = 400, description = "Invalid IDs"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub(crate) async fn merge_preview(
+    State(state): State<AppState>,
+    Query(params): Query<MergePreviewParams>,
+) -> impl IntoResponse {
+    let ids: Result<Vec<u32>, _> = params.ids.split(',')
+        .map(|s| s.trim().parse::<u32>())
+        .collect();
+
+    match ids {
+        Ok(staff_ids) if !staff_ids.is_empty() => {
+            match StaffService::get_staff_merge_preview(&state.db, staff_ids).await {
+                Ok(preview) => (StatusCode::OK, Json(preview)).into_response(),
+                Err(e) => ApiError::from(e).into_response(),
+            }
+        }
+        _ => ApiError::validation("Invalid or empty staff member IDs".to_string(), None).into_response(),
     }
 }
 

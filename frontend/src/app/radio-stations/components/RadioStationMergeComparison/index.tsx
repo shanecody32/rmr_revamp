@@ -4,9 +4,9 @@ import {CloseCircleOutlined, SwapOutlined} from '@ant-design/icons';
 import {Alert, Button, Modal, Radio, Spin, Tabs, Tooltip} from 'antd';
 import {useCallback, useEffect, useState} from 'react';
 
-import {mergeRadioStations} from '@/lib/api/radio-stations';
+import {mergeRadioStations, fetchRadioStationMergePreview} from '@/lib/api/radio-stations';
 import {api} from '@/lib/api/config';
-import type {RadioStationResponse} from '@/types/api/radio-stations';
+import type {RadioStationResponse, RadioStationMergePreviewResponse} from '@/types/api/radio-stations';
 import type {RadioStationMergeResult} from '@/types/api/radio-stations';
 
 import {FIELD_GROUPS} from './constants';
@@ -47,6 +47,7 @@ export default function RadioStationMergeComparison({
     const [initialLoading, setInitialLoading] = useState(true);
     const [merging, setMerging] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [previewData, setPreviewData] = useState<RadioStationMergePreviewResponse | null>(null);
 
     // Reset state when modal opens
     useEffect(() => {
@@ -81,13 +82,19 @@ export default function RadioStationMergeComparison({
 
             setAllStations(initialStations);
 
-            // Load all stations in parallel
-            const results = await Promise.allSettled(
-                allStationIds.map(id => api.get<RadioStationResponse>(`/radio_stations/${id}`).then(res => res.data))
-            );
+            // Load all stations and preview data in parallel
+            const [stationResults, previewResult] = await Promise.all([
+                Promise.allSettled(
+                    allStationIds.map(id => api.get<RadioStationResponse>(`/radio_stations/${id}`).then(res => res.data))
+                ),
+                fetchRadioStationMergePreview(allStationIds).catch(err => {
+                    console.error('Error loading merge preview:', err);
+                    return null;
+                }),
+            ]);
 
             const loadedStations = initialStations.map((station, index) => {
-                const result = results[index];
+                const result = stationResults[index];
                 if (result.status === 'fulfilled') {
                     return {...station, name: result.value.name, data: result.value, loading: false, error: null};
                 } else {
@@ -97,6 +104,7 @@ export default function RadioStationMergeComparison({
             });
 
             setAllStations(loadedStations);
+            setPreviewData(previewResult);
             setInitialLoading(false);
         };
 
@@ -384,6 +392,7 @@ export default function RadioStationMergeComparison({
                     allStations={sortedStations}
                     selectedValues={selectedValues}
                     selectedStationIds={mergingFromIds}
+                    previewData={previewData}
                 />
             )
         }

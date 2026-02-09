@@ -5,8 +5,9 @@ use axum::{
     routing::{get, post, put, delete},
     Json, Router,
 };
-use crate::services::radio_station_service::{RadioStationService, RadioStationFilterParams, MergeRadioStationsRequest};
-use crate::services::types::{PaginatedResponse, SimilarityParams, SimilarResult};
+use serde::Deserialize;
+use crate::services::radio_station_service::{RadioStationService, RadioStationFilterParams, MergeRadioStationsRequest, SimilarRadioStationResult, RadioStationMergePreviewResponse};
+use crate::services::types::{PaginatedResponse, SimilarityParams};
 use crate::views::ApiError;
 use crate::job_state::AppState;
 use crate::models::radio_stations::Model as RadioStation;
@@ -17,6 +18,7 @@ pub fn router() -> Router<AppState> {
         .route("/", post(create_radio_station))
         .route("/similar", get(get_similar_radio_stations))
         .route("/merge", post(merge_radio_stations))
+        .route("/merge-preview", get(merge_preview))
         .route("/{id}", get(get_radio_station))
         .route("/{id}", put(update_radio_station))
         .route("/{id}", delete(delete_radio_station))
@@ -29,7 +31,7 @@ pub fn router() -> Router<AppState> {
         SimilarityParams
     ),
     responses(
-        (status = 200, description = "List similar radio stations", body = [SimilarResult<RadioStation>]),
+        (status = 200, description = "List similar radio stations", body = [SimilarRadioStationResult]),
         (status = 500, description = "Internal server error")
     )
 )]
@@ -139,6 +141,42 @@ pub(crate) async fn delete_radio_station(State(state): State<AppState>, Path(id)
     match RadioStationService::delete_radio_station(&state.db, id).await {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => ApiError::from(e).into_response(),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct MergePreviewParams {
+    ids: String,
+}
+
+#[utoipa::path(
+    get,
+    path = "/radio_stations/merge-preview",
+    params(
+        ("ids" = String, Query, description = "Comma-separated radio station IDs")
+    ),
+    responses(
+        (status = 200, description = "Merge preview with related data counts", body = RadioStationMergePreviewResponse),
+        (status = 400, description = "Invalid IDs"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub(crate) async fn merge_preview(
+    State(state): State<AppState>,
+    Query(params): Query<MergePreviewParams>,
+) -> impl IntoResponse {
+    let ids: Result<Vec<u32>, _> = params.ids.split(',')
+        .map(|s| s.trim().parse::<u32>())
+        .collect();
+
+    match ids {
+        Ok(station_ids) if !station_ids.is_empty() => {
+            match RadioStationService::get_radio_station_merge_preview(&state.db, station_ids).await {
+                Ok(preview) => (StatusCode::OK, Json(preview)).into_response(),
+                Err(e) => ApiError::from(e).into_response(),
+            }
+        }
+        _ => ApiError::validation("Invalid or empty station IDs".to_string(), None).into_response(),
     }
 }
 

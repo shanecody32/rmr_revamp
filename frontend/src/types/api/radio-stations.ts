@@ -59,3 +59,41 @@ export interface RadioStationMergeResult {
     merged_station: RadioStationResponse;
     stats: RadioStationMergeStats;
 }
+
+// =============================================================================
+// Merge Preview Types
+// =============================================================================
+
+export interface RadioStationRelatedCounts {
+    addresses: number;
+    affiliates: number;
+    emails: number;
+    images: number;
+    links: number;
+    phone_numbers: number;
+    internet_details: number;
+    satellite_details: number;
+    syndicated_details: number;
+    terrestrial_details: number;
+    staff_members: number;
+    sub_genres: number;
+    users: number;
+    playlists: number;
+    playlist_archives: number;
+    raw_data: number;
+    song_aliases: number;
+    album_aliases: number;
+    station_aliases: number;
+    duplicate_candidates: number;
+}
+
+export interface RadioStationMergePreviewItem {
+    station_id: number;
+    station_name: string;
+    counts: RadioStationRelatedCounts;
+}
+
+export interface RadioStationMergePreviewResponse {
+    stations: RadioStationMergePreviewItem[];
+    totals: RadioStationRelatedCounts;
+}

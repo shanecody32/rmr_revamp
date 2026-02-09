@@ -176,6 +176,7 @@ struct PlaylistRow {
     pub band_id: Option<u32>,
     pub song_id: Option<u32>,
     pub staff_member_id: Option<u32>,
+    #[allow(dead_code)]
     pub user_id: Option<u32>,
     pub spins: Option<i32>,
     pub invalid: i8,

@@ -1,5 +1,5 @@
 import {PaginationResponse, RadioStationResponse} from '@/types/api';
-import type {MergeRadioStationsRequest, RadioStationMergeResult} from '@/types/api/radio-stations';
+import type {MergeRadioStationsRequest, RadioStationMergeResult, RadioStationMergePreviewResponse} from '@/types/api/radio-stations';
 import type {ApiParams, ApiResponse} from '@/types/api/common';
 import {nameFilterTypeMap} from '@/types/api/common';
 
@@ -37,9 +37,21 @@ export const createRadioStation = async (data: Partial<RadioStationResponse>): P
     return response.data;
 };
 
+export const updateRadioStation = async (id: number, data: Partial<RadioStationResponse>): Promise<RadioStationResponse> => {
+    const response = await api.put<RadioStationResponse>(`/radio_stations/${id}`, data);
+    return response.data;
+};
+
 export const mergeRadioStations = async (data: MergeRadioStationsRequest): Promise<RadioStationMergeResult> => {
     const response = await api.post<RadioStationMergeResult>('/radio_stations/merge', data, {
         timeout: 5 * 60 * 1000,
+    });
+    return response.data;
+};
+
+export const fetchRadioStationMergePreview = async (ids: number[]): Promise<RadioStationMergePreviewResponse> => {
+    const response = await api.get<RadioStationMergePreviewResponse>('/radio_stations/merge-preview', {
+        params: { ids: ids.join(',') }
     });
     return response.data;
 };
@@ -48,6 +60,11 @@ export interface SimilarRadioStation {
     id: number;
     name: string;
     similarity_score: number;
+    type: string | null;
+    active: number;
+    verified: number;
+    approved: number;
+    location: string | null;
 }
 
 export const fetchSimilarRadioStations = async (params: {

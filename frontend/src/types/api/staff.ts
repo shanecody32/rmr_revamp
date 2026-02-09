@@ -239,6 +239,33 @@ export interface StaffMergeResult {
 }
 
 // =============================================================================
+// Merge Preview Types
+// =============================================================================
+
+export interface StaffRelatedCounts {
+    images: number;
+    links: number;
+    phones: number;
+    addresses: number;
+    aliases: number;
+    playlists: number;
+    playlist_archives: number;
+    sub_genres: number;
+    duplicate_candidates: number;
+}
+
+export interface StaffMergePreviewItem {
+    staff_id: number;
+    staff_name: string;
+    counts: StaffRelatedCounts;
+}
+
+export interface StaffMergePreviewResponse {
+    staff: StaffMergePreviewItem[];
+    totals: StaffRelatedCounts;
+}
+
+// =============================================================================
 // Transfer Types
 // =============================================================================
 
@@ -282,6 +309,8 @@ export interface SimilarStaff {
     similarity_score: number;
     verified: number;
     approved: number;
+    station_name: string | null;
+    station_location: string | null;
 }
 
 // =============================================================================

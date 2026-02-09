@@ -20,6 +20,8 @@ use crate::services::MergeBandsRequest;
 use crate::api::bands::{BandDiscographyResponse};
 use crate::api::band_images::{ReorderRequest, BandImageUpdate, ReorderUpdate};
 use crate::services::types::{PaginatedResponse, PaginationInfo, SimilarResult};
+use crate::services::radio_station_service::{SimilarRadioStationResult, RadioStationRelatedCounts, RadioStationMergePreview, RadioStationMergePreviewResponse};
+use crate::services::staff_service::{SimilarStaffResult, StaffRelatedCounts, StaffMergePreview, StaffMergePreviewResponse};
 use crate::job_state::{BackfillJobState, EntityJobState, TaskJobState};
 
 #[derive(OpenApi)]
@@ -64,8 +66,10 @@ use crate::job_state::{BackfillJobState, EntityJobState, TaskJobState};
         radio_stations::update_radio_station,
         radio_stations::delete_radio_station,
         radio_stations::get_similar_radio_stations,
+        radio_stations::merge_preview,
         labels::get_similar_labels,
         staff_members::get_similar_staff_members,
+        staff_members::merge_preview,
         postal_codes::get_similar_postal_codes,
         locations::search_locations,
         band_images::upload_band_image,
@@ -82,7 +86,7 @@ use crate::job_state::{BackfillJobState, EntityJobState, TaskJobState};
         system::get_album_genre_update_progress,
     ),
     components(
-        schemas(User, Band, Album, Song, Genre, SubGenre, Country, State, City, RadioStation, Label, StaffMember, PostalCode, BandImage, LocationResponse, LoginRequest, LoginResponse, MergeBandsRequest, ReorderRequest, BandImageUpdate, ReorderUpdate, BandDiscographyResponse, PaginatedResponse<Band>, PaginatedResponse<Album>, PaginatedResponse<Song>, PaginatedResponse<Genre>, PaginatedResponse<SubGenre>, PaginatedResponse<Country>, PaginatedResponse<State>, PaginatedResponse<City>, PaginatedResponse<RadioStation>, PaginationInfo, SimilarResult<Band>, SimilarResult<Album>, SimilarResult<Song>, SimilarResult<Genre>, SimilarResult<SubGenre>, SimilarResult<Country>, SimilarResult<State>, SimilarResult<City>, SimilarResult<RadioStation>, SimilarResult<Label>, SimilarResult<StaffMember>, SimilarResult<PostalCode>, BackfillJobState, EntityJobState, TaskJobState)
+        schemas(User, Band, Album, Song, Genre, SubGenre, Country, State, City, RadioStation, Label, StaffMember, PostalCode, BandImage, LocationResponse, LoginRequest, LoginResponse, MergeBandsRequest, ReorderRequest, BandImageUpdate, ReorderUpdate, BandDiscographyResponse, PaginatedResponse<Band>, PaginatedResponse<Album>, PaginatedResponse<Song>, PaginatedResponse<Genre>, PaginatedResponse<SubGenre>, PaginatedResponse<Country>, PaginatedResponse<State>, PaginatedResponse<City>, PaginatedResponse<RadioStation>, PaginationInfo, SimilarResult<Band>, SimilarResult<Album>, SimilarResult<Song>, SimilarResult<Genre>, SimilarResult<SubGenre>, SimilarResult<Country>, SimilarResult<State>, SimilarResult<City>, SimilarRadioStationResult, SimilarResult<Label>, SimilarStaffResult, SimilarResult<PostalCode>, BackfillJobState, EntityJobState, TaskJobState, RadioStationRelatedCounts, RadioStationMergePreview, RadioStationMergePreviewResponse, StaffRelatedCounts, StaffMergePreview, StaffMergePreviewResponse)
     ),
     tags(
         (name = "RMR API", description = "Roots Music Report API")

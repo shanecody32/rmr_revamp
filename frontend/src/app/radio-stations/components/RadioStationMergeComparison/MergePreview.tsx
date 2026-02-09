@@ -1,10 +1,10 @@
 'use client'
 
-import {Card, Col, Descriptions, Empty, Row, Tag, Typography} from 'antd';
+import {Card, Col, Descriptions, Empty, Row, Spin, Table, Tag, Typography} from 'antd';
 import React from 'react';
 
 import DOMPurify from 'dompurify';
-import type {RadioStationResponse} from '@/types/api/radio-stations';
+import type {RadioStationResponse, RadioStationMergePreviewResponse, RadioStationRelatedCounts} from '@/types/api/radio-stations';
 
 import type {RadioStationComparisonItem, MergeFieldValue} from './types';
 
@@ -15,14 +15,37 @@ interface MergePreviewProps {
     allStations: RadioStationComparisonItem[];
     selectedValues: Record<string, MergeFieldValue>;
     selectedStationIds: number[];
+    previewData: RadioStationMergePreviewResponse | null;
 }
 
-export default function MergePreview({originalStation, allStations, selectedValues, selectedStationIds}: MergePreviewProps) {
+const CATEGORY_LABELS: { key: keyof RadioStationRelatedCounts; label: string }[] = [
+    {key: 'addresses', label: 'Addresses'},
+    {key: 'affiliates', label: 'Affiliates'},
+    {key: 'emails', label: 'Emails'},
+    {key: 'images', label: 'Images'},
+    {key: 'links', label: 'Links'},
+    {key: 'phone_numbers', label: 'Phone Numbers'},
+    {key: 'internet_details', label: 'Internet Details'},
+    {key: 'satellite_details', label: 'Satellite Details'},
+    {key: 'syndicated_details', label: 'Syndicated Details'},
+    {key: 'terrestrial_details', label: 'Terrestrial Details'},
+    {key: 'staff_members', label: 'Staff Members'},
+    {key: 'sub_genres', label: 'Sub-Genres'},
+    {key: 'users', label: 'Users'},
+    {key: 'playlists', label: 'Playlists'},
+    {key: 'playlist_archives', label: 'Playlist Archives'},
+    {key: 'raw_data', label: 'Raw Data'},
+    {key: 'song_aliases', label: 'Song Aliases'},
+    {key: 'album_aliases', label: 'Album Aliases'},
+    {key: 'station_aliases', label: 'Station Aliases'},
+    {key: 'duplicate_candidates', label: 'Duplicate Candidates'},
+];
+
+export default function MergePreview({originalStation, allStations, selectedValues, selectedStationIds, previewData}: MergePreviewProps) {
     if (!originalStation) {
         return <div className="text-center">Original radio station not found</div>;
     }
 
-    // No stations to merge
     if (selectedStationIds.length === 0) {
         return (
             <Empty
@@ -36,27 +59,87 @@ export default function MergePreview({originalStation, allStations, selectedValu
         );
     }
 
-    // Create a merged station object based on selected values
     const createMergedStation = (): Partial<RadioStationResponse> => {
-        // Start with the original station data as the base
         const mergedStation: Partial<RadioStationResponse> = {...originalStation.data};
-
-        // Apply all selected values
         Object.entries(selectedValues).forEach(([key, data]) => {
             (mergedStation as any)[key] = data.value;
         });
-
         return mergedStation;
     };
 
-    // Generate the merged station from selections
     const mergedStation = createMergedStation();
 
-    // Function to check if a value is present
     const hasValue = (value: any): boolean => {
         if (value === undefined || value === null) return false;
         if (typeof value === 'string') return value.trim() !== '';
         return true;
+    };
+
+    // Build table data for related counts
+    const buildRelatedDataTable = () => {
+        if (!previewData) {
+            return <Spin tip="Loading related data counts..." />;
+        }
+
+        const columns = [
+            {
+                title: 'Category',
+                dataIndex: 'category',
+                key: 'category',
+                width: 180,
+            },
+            ...previewData.stations.map(station => ({
+                title: (
+                    <span className={station.station_id === originalStation.id ? 'text-blue-600 font-medium' : ''}>
+                        {station.station_name}
+                        {station.station_id === originalStation.id && ' (Primary)'}
+                    </span>
+                ),
+                dataIndex: `station_${station.station_id}`,
+                key: `station_${station.station_id}`,
+                width: 120,
+                align: 'center' as const,
+            })),
+            {
+                title: <span className="font-semibold">Total</span>,
+                dataIndex: 'total',
+                key: 'total',
+                width: 100,
+                align: 'center' as const,
+                render: (val: number) => <span className="font-semibold">{val}</span>,
+            },
+        ];
+
+        const dataSource = CATEGORY_LABELS.map(({key, label}) => {
+            const row: Record<string, any> = {
+                key,
+                category: label,
+                total: previewData.totals[key],
+            };
+            for (const station of previewData.stations) {
+                const count = station.counts[key];
+                row[`station_${station.station_id}`] = count;
+            }
+            return row;
+        });
+
+        const totalRecords = Object.values(previewData.totals).reduce((sum, val) => sum + val, 0);
+
+        return (
+            <>
+                <Table
+                    dataSource={dataSource}
+                    columns={columns}
+                    pagination={false}
+                    size="small"
+                    bordered
+                    rowClassName={(record) => record.total === 0 ? 'text-gray-400' : ''}
+                />
+                <div className="mt-3 text-sm">
+                    Merging <strong>{previewData.stations.length}</strong> stations will consolidate <strong>{totalRecords}</strong> total related records.
+                </div>
+            </>
+        );
     };
 
     return (
@@ -161,6 +244,12 @@ export default function MergePreview({originalStation, allStations, selectedValu
                                 <Text>{mergedStation.influence ?? 0}</Text>
                             </Descriptions.Item>
                         </Descriptions>
+                    </Card>
+                </Col>
+
+                <Col xs={24}>
+                    <Card title="Related Data Breakdown" size="small">
+                        {buildRelatedDataTable()}
                     </Card>
                 </Col>
 
