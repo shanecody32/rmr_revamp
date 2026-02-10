@@ -107,6 +107,8 @@ export interface SimilarEntitiesModalProps<T extends SimilarEntity> {
     manualSearch?: ManualSearchConfig<T>;
     /** IDs to pre-select when modal opens */
     preSelectedIds?: number[];
+    /** When true, hides the restrict_to_parent toggle and forces it to true */
+    forceRestrictToParent?: boolean;
 }
 
 // Empty array constant to avoid creating new reference on each render
@@ -134,6 +136,7 @@ export default function SimilarEntitiesModal<T extends SimilarEntity>({
     settingsStorageKey,
     manualSearch,
     preSelectedIds,
+    forceRestrictToParent,
 }: SimilarEntitiesModalProps<T>) {
     const stablePreSelectedIds = preSelectedIds ?? EMPTY_ARRAY;
     const [selectedEntities, setSelectedEntities] = useState<T[]>([]);
@@ -144,7 +147,9 @@ export default function SimilarEntitiesModal<T extends SimilarEntity>({
         const base = settingsStorageKey
             ? loadSavedSettings(settingsStorageKey)
             : defaultSearchSettings;
-        return {...base, ...searchSettings};
+        const merged = {...base, ...searchSettings};
+        if (forceRestrictToParent) merged.restrict_to_parent = true;
+        return merged;
     });
 
     // Reset selections when modal opens/closes or similarEntities change
@@ -164,9 +169,13 @@ export default function SimilarEntitiesModal<T extends SimilarEntity>({
     // Sync local settings with props
     useEffect(() => {
         if (searchSettings) {
-            setLocalSettings(prev => ({...prev, ...searchSettings}));
+            setLocalSettings(prev => {
+                const merged = {...prev, ...searchSettings};
+                if (forceRestrictToParent) merged.restrict_to_parent = true;
+                return merged;
+            });
         }
-    }, [searchSettings]);
+    }, [searchSettings, forceRestrictToParent]);
 
     // Debounced manual search
     const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -510,16 +519,18 @@ export default function SimilarEntitiesModal<T extends SimilarEntity>({
                                         />
                                     </div>
 
-                                    <div>
-                                        <Text className="block mb-2 font-medium">Restrict to Parent</Text>
-                                        <Switch
-                                            checked={localSettings.restrict_to_parent}
-                                            onChange={(checked) => setLocalSettings(prev => ({...prev, restrict_to_parent: checked}))}
-                                        />
-                                        <Text type="secondary" className="text-xs block mt-1">
-                                            Only search within same parent entity
-                                        </Text>
-                                    </div>
+                                    {!forceRestrictToParent && (
+                                        <div>
+                                            <Text className="block mb-2 font-medium">Restrict to Parent</Text>
+                                            <Switch
+                                                checked={localSettings.restrict_to_parent}
+                                                onChange={(checked) => setLocalSettings(prev => ({...prev, restrict_to_parent: checked}))}
+                                            />
+                                            <Text type="secondary" className="text-xs block mt-1">
+                                                Only search within same parent entity
+                                            </Text>
+                                        </div>
+                                    )}
 
                                     <div className="flex items-end">
                                         <Button

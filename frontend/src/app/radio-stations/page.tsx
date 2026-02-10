@@ -1,13 +1,8 @@
 import { Suspense } from 'react';
-import dynamic from 'next/dynamic';
 
 import LoadingSpinner from '@/components/common/feedback/LoadingSpinner';
 import { PageHeader } from '@/components/layout';
-
-const RadioStationsPageContent = dynamic(
-    () => import('./components/RadioStationsPageContent'),
-    { ssr: false }
-);
+import RadioStationsPageContent from './components/RadioStationsPageContent';
 
 export const metadata = {
     title: 'Radio Stations - RMR Admin',

@@ -616,7 +616,7 @@ impl DuplicateScanEntity for RadioStationScanEntity {
             min_similarity: Some(min_similarity), limit: Some(50), ..Default::default()
         };
         let results = RadioStationService::get_similar_radio_stations(db, params).await?;
-        Ok(results.into_iter().map(|r| (r.model.id, r.similarity_score)).collect())
+        Ok(results.into_iter().map(|r| (r.station.id, r.similarity_score)).collect())
     }
 
     async fn get_existing_pairs(db: &DatabaseConnection, ids: &[u32]) -> Result<HashSet<(u32, u32)>, DbErr> {
@@ -726,7 +726,7 @@ impl DuplicateScanEntity for StaffMemberScanEntity {
             min_similarity: Some(min_similarity), limit: Some(50), ..Default::default()
         };
         let results = StaffService::get_similar_staff_members(db, params).await?;
-        Ok(results.into_iter().map(|r| (r.model.id, r.similarity_score)).collect())
+        Ok(results.into_iter().map(|r| (r.staff.id, r.similarity_score)).collect())
     }
 
     async fn get_existing_pairs(db: &DatabaseConnection, ids: &[u32]) -> Result<HashSet<(u32, u32)>, DbErr> {

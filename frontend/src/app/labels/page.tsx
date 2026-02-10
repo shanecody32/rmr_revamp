@@ -1,13 +1,8 @@
 import { Suspense } from 'react';
-import dynamic from 'next/dynamic';
 
 import LoadingSpinner from '@/components/common/feedback/LoadingSpinner';
 import { PageHeader } from '@/components/layout';
-
-const LabelPageContent = dynamic(
-    () => import('./components/LabelPageContent'),
-    { ssr: false }
-);
+import LabelPageContent from './components/LabelPageContent';
 
 export const metadata = {
     title: 'Labels - RMR Admin',

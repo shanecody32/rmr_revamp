@@ -1,7 +1,7 @@
 'use client'
 
 import {PlusOutlined} from '@ant-design/icons';
-import {App, Button, Space} from 'antd';
+import {App, Button, Checkbox, Space, Tag, Typography} from 'antd';
 import {useRouter} from 'next/navigation';
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
@@ -23,6 +23,7 @@ import {
 import type {RadioStationResponse} from '@/types/api';
 
 import AddRadioStationModal from './AddRadioStationModal';
+import RadioStationAdvancedSearchDrawer from './RadioStationAdvancedSearchDrawer';
 import RadioStationMergeComparison from './RadioStationMergeComparison';
 
 const SETTINGS_KEY = 'radio-station-similarity-search-settings';
@@ -56,6 +57,7 @@ export default function RadioStationsPageContent() {
     const {message} = App.useApp();
     const [modals, setModals] = useState({
         add: false,
+        advancedSearch: false,
         similarStations: false,
         merge: false,
     });
@@ -104,6 +106,36 @@ export default function RadioStationsPageContent() {
             mounted.current = false;
         };
     }, []);
+
+    // Save page state to sessionStorage
+    useEffect(() => {
+        if (currentPage && pageSize) {
+            sessionStorage.setItem('radio-stations-page', JSON.stringify({page: currentPage, pageSize}));
+        }
+    }, [currentPage, pageSize]);
+
+    // Restore page state on mount
+    useEffect(() => {
+        const savedState = sessionStorage.getItem('radio-stations-page');
+        if (savedState) {
+            try {
+                const {page, pageSize: savedPageSize} = JSON.parse(savedState);
+                if (page && page > 1) {
+                    loadData(page, savedPageSize);
+                }
+            } catch (e) {
+                console.error('Error restoring page state:', e);
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Handle advanced search filters
+    const handleAdvancedSearch = (advancedFilters: Record<string, any>) => {
+        if (!mounted.current) return;
+        loadData(1, undefined, undefined, advancedFilters);
+        setModals(prev => ({...prev, advancedSearch: false}));
+    };
 
     // Handle verify button click (forceModal = true bypasses "no results" redirect)
     const handleVerifyClick = useCallback(async (station: RadioStationResponse, forceModal = false) => {
@@ -216,6 +248,34 @@ export default function RadioStationsPageContent() {
         verifyingStationId,
     }), [handleVerifyClick, handleFindComparisons, verifyingStationId]);
 
+    const {Text} = Typography;
+
+    const renderStationItem = (entity: SimilarRadioStation, isSelected: boolean, isManuallyAdded: boolean) => (
+        <div className="flex items-start gap-3">
+            <Checkbox checked={isSelected} />
+            <div className="flex-1 min-w-0">
+                <Text strong className="block truncate">{entity.name}</Text>
+                <Space size="small" wrap className="mt-2">
+                    {isManuallyAdded ? (
+                        <Tag color="purple"><PlusOutlined /> Manual</Tag>
+                    ) : (
+                        <Tag color="blue">{entity.similarity_score}% match</Tag>
+                    )}
+                    {entity.type && (
+                        <Tag color={entity.type === 'terrestrial' ? 'geekblue' : 'purple'}>
+                            {entity.type === 'terrestrial' ? 'Terrestrial' : 'Internet'}
+                        </Tag>
+                    )}
+                    {entity.location && (
+                        <Tag color="cyan">{entity.location}</Tag>
+                    )}
+                    {entity.active === 1 && <Tag color="green">Active</Tag>}
+                    {entity.verified === 1 && <Tag color="success">Verified</Tag>}
+                </Space>
+            </div>
+        </div>
+    );
+
     return (
         <>
             {error && (
@@ -241,6 +301,7 @@ export default function RadioStationsPageContent() {
                             searchTerm={searchTerm}
                             filterType={filterType || 'contains'}
                             searchPlaceholder="Search stations..."
+                            onAdvancedSearch={() => setModals(prev => ({...prev, advancedSearch: true}))}
                         />
                         <Button
                             type="primary"
@@ -290,6 +351,15 @@ export default function RadioStationsPageContent() {
                 ]}
             />
 
+            <RadioStationAdvancedSearchDrawer
+                open={modals.advancedSearch}
+                onClose={() => setModals(prev => ({...prev, advancedSearch: false}))}
+                onSearch={handleAdvancedSearch}
+                filterType={filterType || 'contains'}
+                onFilterTypeChange={setFilterType}
+                filters={filters}
+            />
+
             <SimilarEntitiesModal<SimilarRadioStation>
                 open={modals.similarStations}
                 onCancel={() => setModals(prev => ({...prev, similarStations: false}))}
@@ -304,6 +374,7 @@ export default function RadioStationsPageContent() {
                 mode="select-multiple"
                 searchSettings={searchSettings}
                 settingsStorageKey={SETTINGS_KEY}
+                renderItem={renderStationItem}
                 manualSearch={{
                     searchEntities: async (query) => {
                         const result = await fetchRadioStations({name: query, name_filter_type: 'contains', page: 1, page_size: 20});
@@ -313,6 +384,11 @@ export default function RadioStationsPageContent() {
                         id: station.id,
                         name: station.name,
                         similarity_score: 0,
+                        type: station.type ?? null,
+                        active: station.active ?? 0,
+                        verified: station.verified ?? 0,
+                        approved: station.approved ?? 0,
+                        location: null,
                     } as SimilarRadioStation),
                     excludeId: stationToVerify?.id,
                 }}

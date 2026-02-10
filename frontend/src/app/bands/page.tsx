@@ -1,13 +1,8 @@
 import { Suspense } from 'react';
-import dynamic from 'next/dynamic';
 
 import LoadingSpinner from '@/components/common/feedback/LoadingSpinner';
 import { PageHeader } from '@/components/layout';
-
-const BandsPageContent = dynamic(
-    () => import('./components/BandsPageContent'),
-    { ssr: false }
-);
+import BandsPageContent from './components/BandsPageContent';
 
 export const metadata = {
     title: 'Bands - RMR Admin',

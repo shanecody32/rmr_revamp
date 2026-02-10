@@ -1,13 +1,8 @@
 import { Suspense } from 'react';
-import dynamic from 'next/dynamic';
 
 import LoadingSpinner from '@/components/common/feedback/LoadingSpinner';
 import { PageHeader } from '@/components/layout';
-
-const StaffPageContent = dynamic(
-    () => import('./components/StaffPageContent'),
-    { ssr: false }
-);
+import StaffPageContent from './components/StaffPageContent';
 
 export const metadata = {
     title: 'Staff Members - RMR Admin',

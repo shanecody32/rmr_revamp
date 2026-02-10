@@ -19,6 +19,7 @@ mod m20260203_create_song_artists;
 mod m20260203_add_entity_type_fields;
 mod m20260203_add_entity_status_fields;
 mod m20260204_add_similarity_search_indexes;
+mod m20260209_fix_missing_phonetic_columns;
 
 pub struct Migrator;
 
@@ -45,6 +46,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260203_add_entity_type_fields::Migration),
             Box::new(m20260203_add_entity_status_fields::Migration),
             Box::new(m20260204_add_similarity_search_indexes::Migration),
+            Box::new(m20260209_fix_missing_phonetic_columns::Migration),
         ]
     }
 }

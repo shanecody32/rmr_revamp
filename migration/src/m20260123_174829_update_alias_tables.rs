@@ -61,6 +61,9 @@ impl MigrationTrait for Migration {
                         .col(ColumnDef::new(Alias::new("sanitized_name")).string().null())
                         .col(ColumnDef::new(Alias::new("soundex_key")).string_len(4).null())
                         .col(ColumnDef::new(Alias::new("phonetic_key")).string().null())
+                        .col(ColumnDef::new(Alias::new("metaphone_key")).string_len(8).null())
+                        .col(ColumnDef::new(Alias::new("dmetaphone_key")).string_len(8).null())
+                        .col(ColumnDef::new(Alias::new("dmetaphone_alt_key")).string_len(8).null())
                         .col(ColumnDef::new(Alias::new("created")).date_time().null())
                         .col(ColumnDef::new(Alias::new("modified")).date_time().null())
                         .to_owned(),

@@ -1,11 +1,10 @@
 'use client'
 
-import {useEffect, useState} from 'react';
 import {Checkbox, Flex, Space, Tag, Typography} from 'antd';
-import {fetchSimilarStaff, fetchStaffById} from '@/lib/api/staff';
+import {fetchSimilarStaff} from '@/lib/api/staff';
 import type {SimilarStaff} from '@/types/api/staff';
 import {getStaffDisplayName} from '@/types/api/staff';
-import StaffMergeComparisonModal from '../../components/StaffMergeComparisonModal';
+import StaffMergeComparison from '../../components/StaffMergeComparison';
 import DuplicateCheckerContent from '@/components/common/duplicates/DuplicateCheckerContent';
 import type {DuplicateEntityConfig, MergeConfig} from '@/components/common/duplicates/types';
 import type {SimilarEntity} from '@/components/common/modals/SimilarEntitiesModal';
@@ -49,8 +48,7 @@ const renderStaffItem = (entity: SimilarStaffWithName, isSelected: boolean) => {
     );
 };
 
-// Staff merge modal takes staffMembers (StaffDetailView[]) instead of IDs,
-// so we wrap it to pre-fetch the full details.
+// Staff merge wrapper using the new tabbed StaffMergeComparison component
 function StaffMergeWrapper(props: {
     open: boolean;
     onCancel: () => void;
@@ -58,36 +56,12 @@ function StaffMergeWrapper(props: {
     primaryId: number;
     selectedIds: number[];
 }) {
-    const [staffMembers, setStaffMembers] = useState<any[]>([]);
-    const [loading, setLoading] = useState(false);
-
-    useEffect(() => {
-        if (!props.open) return;
-        const allIds = [props.primaryId, ...props.selectedIds];
-        setLoading(true);
-        Promise.all(
-            allIds.map(id =>
-                fetchStaffById(id, {
-                    include_images: true,
-                    include_addresses: true,
-                    include_links: true,
-                    include_phones: true,
-                    include_sub_genres: true,
-                })
-            )
-        )
-            .then(setStaffMembers)
-            .catch(console.error)
-            .finally(() => setLoading(false));
-    }, [props.open, props.primaryId, props.selectedIds]);
-
-    if (loading || staffMembers.length === 0) return null;
-
     return (
-        <StaffMergeComparisonModal
+        <StaffMergeComparison
             open={props.open}
             onCancel={props.onCancel}
-            staffMembers={staffMembers}
+            originalStaffId={props.primaryId}
+            selectedStaffIds={props.selectedIds}
             onMergeComplete={props.onMergeComplete}
         />
     );
